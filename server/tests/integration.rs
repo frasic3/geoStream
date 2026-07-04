@@ -1,5 +1,5 @@
-// Test integration: lanciano il binary server con porta e DB isolati
-// per essere parallel-safe. Prerequisito: `cargo build -p server`.
+// Integration tests: they launch the server binary with isolated port and DB
+// to be parallel-safe. Prerequisite: `cargo build -p server`.
 use common::{decode, encode, Message};
 use futures_util::{SinkExt, StreamExt};
 use std::process::{Child, Command};
@@ -52,7 +52,7 @@ impl Harness {
                 break;
             }
             if std::time::Instant::now() > deadline {
-                panic!("server non si avvia entro 5s");
+                panic!("server did not start within 5s");
             }
             std::thread::sleep(Duration::from_millis(50));
         }
@@ -74,14 +74,14 @@ impl Drop for Harness {
     }
 }
 
-async fn invia_e_ricevi(addr: &str, msg: &Message) -> Message {
+async fn send_and_recv(addr: &str, msg: &Message) -> Message {
     let (mut ws, _) = tokio_tungstenite::connect_async(ws_url(addr))
         .await
         .expect("connect ws");
     let payload = encode(msg).unwrap();
     ws.send(WsMessage::Text(payload)).await.unwrap();
     loop {
-        match ws.next().await.expect("stream chiuso").expect("ws error") {
+        match ws.next().await.expect("stream closed").expect("ws error") {
             WsMessage::Text(t) => return decode(&t).unwrap(),
             _ => continue,
         }
@@ -89,9 +89,9 @@ async fn invia_e_ricevi(addr: &str, msg: &Message) -> Message {
 }
 
 #[tokio::test]
-async fn register_risponde_con_auth_ok() {
+async fn register_replies_with_auth_ok() {
     let h = Harness::start();
-    let risposta = invia_e_ricevi(
+    let response = send_and_recv(
         &h.addr,
         &Message::Register {
             username: "mario".into(),
@@ -99,16 +99,16 @@ async fn register_risponde_con_auth_ok() {
         },
     )
     .await;
-    match risposta {
+    match response {
         Message::AuthOk { token } => assert!(!token.is_empty()),
-        altro => panic!("risposta inattesa: {altro:?}"),
+        other => panic!("unexpected response: {other:?}"),
     }
 }
 
 #[tokio::test]
-async fn login_dopo_register_risponde_con_auth_ok() {
+async fn login_after_register_replies_with_auth_ok() {
     let h = Harness::start();
-    invia_e_ricevi(
+    send_and_recv(
         &h.addr,
         &Message::Register {
             username: "luigi".into(),
@@ -116,7 +116,7 @@ async fn login_dopo_register_risponde_con_auth_ok() {
         },
     )
     .await;
-    let risposta = invia_e_ricevi(
+    let response = send_and_recv(
         &h.addr,
         &Message::Login {
             username: "luigi".into(),
@@ -124,62 +124,62 @@ async fn login_dopo_register_risponde_con_auth_ok() {
         },
     )
     .await;
-    match risposta {
+    match response {
         Message::AuthOk { token } => assert!(!token.is_empty()),
-        altro => panic!("risposta inattesa: {altro:?}"),
+        other => panic!("unexpected response: {other:?}"),
     }
 }
 
 #[tokio::test]
-async fn login_password_sbagliata_risponde_con_error() {
+async fn login_wrong_password_replies_with_error() {
     let h = Harness::start();
-    invia_e_ricevi(
+    send_and_recv(
         &h.addr,
         &Message::Register {
             username: "peach".into(),
-            password: "corretta".into(),
+            password: "correct1".into(),
         },
     )
     .await;
-    let risposta = invia_e_ricevi(
+    let response = send_and_recv(
         &h.addr,
         &Message::Login {
             username: "peach".into(),
-            password: "sbagliata".into(),
+            password: "wrongpass".into(),
         },
     )
     .await;
-    assert!(matches!(risposta, Message::Error { .. }));
+    assert!(matches!(response, Message::Error { .. }));
 }
 
 #[tokio::test]
-async fn login_utente_inesistente_risponde_con_error() {
+async fn login_nonexistent_user_replies_with_error() {
     let h = Harness::start();
-    let risposta = invia_e_ricevi(
+    let response = send_and_recv(
         &h.addr,
         &Message::Login {
-            username: "fantasma".into(),
-            password: "qualsiasi".into(),
+            username: "ghost".into(),
+            password: "whatever".into(),
         },
     )
     .await;
-    assert!(matches!(risposta, Message::Error { .. }));
+    assert!(matches!(response, Message::Error { .. }));
 }
 
 #[tokio::test]
-async fn register_duplicato_risponde_con_error() {
+async fn duplicate_register_replies_with_error() {
     let h = Harness::start();
     let msg = Message::Register {
         username: "bowser".into(),
         password: "secret".into(),
     };
-    invia_e_ricevi(&h.addr, &msg).await;
-    let risposta = invia_e_ricevi(&h.addr, &msg).await;
-    assert!(matches!(risposta, Message::Error { .. }));
+    send_and_recv(&h.addr, &msg).await;
+    let response = send_and_recv(&h.addr, &msg).await;
+    assert!(matches!(response, Message::Error { .. }));
 }
 
 #[tokio::test]
-async fn start_e_end_trip_lifecycle() {
+async fn start_and_end_trip_lifecycle() {
     let h = Harness::start();
     let (mut ws, _) = tokio_tungstenite::connect_async(ws_url(&h.addr))
         .await
@@ -198,7 +198,7 @@ async fn start_e_end_trip_lifecycle() {
         match ws.next().await.unwrap().unwrap() {
             WsMessage::Text(t) => match decode(&t).unwrap() {
                 Message::AuthOk { token } => break token,
-                other => panic!("atteso AuthOk, ricevuto {other:?}"),
+                other => panic!("expected AuthOk, got {other:?}"),
             },
             _ => continue,
         }
@@ -219,7 +219,7 @@ async fn start_e_end_trip_lifecycle() {
         match ws.next().await.unwrap().unwrap() {
             WsMessage::Text(t) => match decode(&t).unwrap() {
                 Message::TripStarted { trip_id, .. } => break trip_id,
-                other => panic!("atteso TripStarted, ricevuto {other:?}"),
+                other => panic!("expected TripStarted, got {other:?}"),
             },
             _ => continue,
         }
@@ -243,9 +243,9 @@ async fn start_e_end_trip_lifecycle() {
 }
 
 #[tokio::test]
-async fn start_trip_richiede_token_valido() {
+async fn start_trip_requires_valid_token() {
     let h = Harness::start();
-    let risposta = invia_e_ricevi(
+    let response = send_and_recv(
         &h.addr,
         &Message::StartTrip {
             token: "fake".into(),
@@ -255,8 +255,8 @@ async fn start_trip_richiede_token_valido() {
         },
     )
     .await;
-    match risposta {
+    match response {
         Message::Error { code, .. } => assert_eq!(code, "UNAUTHORIZED"),
-        altro => panic!("risposta inattesa: {altro:?}"),
+        other => panic!("unexpected response: {other:?}"),
     }
 }

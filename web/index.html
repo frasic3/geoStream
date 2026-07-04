@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -200,7 +200,7 @@
     .pill.bad { color: #fca5a5; border-color: rgba(239, 68, 68, 0.3); }
     .pill.bad .dot { background: var(--danger); }
 
-    /* Grid principale */
+    /* Main grid */
     .grid {
       display: grid;
       grid-template-columns: 1fr;
@@ -211,7 +211,7 @@
       .grid .full { grid-column: 1 / -1; }
     }
 
-    /* Card generica */
+    /* Generic card */
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -234,7 +234,7 @@
     .card-body { padding: 1rem 1.1rem; }
     .card-body.tight { padding: 0; }
 
-    /* Mappa */
+    /* Map */
     #map {
       height: 480px;
       background: var(--bg-2);
@@ -405,7 +405,7 @@
       text-align: center; padding: 1rem 0;
     }
 
-    /* Stato utente */
+    /* User status */
     .status-list { display: flex; flex-direction: column; gap: 0.75rem; }
     .status-row {
       display: flex; justify-content: space-between; align-items: center;
@@ -428,7 +428,7 @@
     }
     .status-row .v.mono { font-family: var(--mono); font-size: 0.82rem; }
 
-    /* Debug log collassabile */
+    /* Collapsible debug log */
     details.debug {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -478,18 +478,18 @@
   <div class="auth-screen" id="auth-screen">
     <div class="auth-card">
       <h1>georuggine</h1>
-      <p class="tagline">Login per iniziare a tracciare i tuoi spostamenti.</p>
+      <p class="tagline">Log in to start tracking your movements.</p>
       <div class="field">
         <label for="user">Username</label>
-        <input id="user" type="text" autocomplete="username" placeholder="es. pippo" value="pippo">
+        <input id="user" type="text" autocomplete="username" placeholder="e.g. pippo" value="pippo">
       </div>
       <div class="field">
         <label for="pass">Password</label>
         <input id="pass" type="password" autocomplete="current-password" placeholder="•••••••" value="secret">
       </div>
       <div class="auth-actions">
-        <button class="ghost" onclick="doRegister()">Registrati</button>
-        <button class="primary" onclick="doLogin()">Accedi</button>
+        <button class="ghost" onclick="doRegister()">Register</button>
+        <button class="primary" onclick="doLogin()">Log in</button>
       </div>
       <div class="auth-error" id="auth-error" role="alert" aria-live="polite">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -511,26 +511,26 @@
         <span>georuggine</span>
       </div>
       <div class="user-info">
-        <span class="who">Utente: <strong id="who-user">—</strong></span>
+        <span class="who">User: <strong id="who-user">—</strong></span>
         <span id="conn-pill" class="pill"><span class="dot"></span><span>—</span></span>
-        <button class="danger" onclick="doQuit()">Disconnetti</button>
+        <button class="danger" onclick="doQuit()">Disconnect</button>
       </div>
     </div>
 
     <div class="grid">
 
-      <!-- Mappa (full width on small, 2fr on desktop) -->
+      <!-- Map (full width on small, 2fr on desktop) -->
       <div class="card full">
         <div class="card-header">
-          <h2>Mappa · Torino</h2>
+          <h2>Map · Turin</h2>
           <div class="actions">
-            <span id="trip-pill" class="pill"><span class="dot"></span><span>Nessun trip</span></span>
+            <span id="trip-pill" class="pill"><span class="dot"></span><span>No trip</span></span>
           </div>
         </div>
         <div class="card-body tight map-overlay">
           <div id="map"></div>
           <div class="floating-actions">
-            <button id="btn-center" onclick="recenterMap()">Centra</button>
+            <button id="btn-center" onclick="recenterMap()">Recenter</button>
             <button id="btn-trip" class="primary" onclick="toggleTrip()">Start Trip</button>
           </div>
         </div>
@@ -539,37 +539,37 @@
       <!-- CPU stats (full width) -->
       <div class="card full">
         <div class="card-header">
-          <h2>CPU del server · ultimi campionamenti</h2>
+          <h2>Server CPU · latest samples</h2>
           <div class="actions">
-            <button class="ghost" onclick="refreshCpu()" title="Rilegge server_cpu.log. Il server registra un nuovo campione ogni 2 minuti.">Ricarica log</button>
+            <button class="ghost" onclick="refreshCpu()" title="Re-reads server_cpu.log. The server records a new sample every 2 minutes.">Reload log</button>
           </div>
         </div>
         <div class="card-body">
           <div class="cpu-metrics" id="cpu-metrics">
             <div class="metric">
-              <div class="label">Uso CPU (intervallo)</div>
+              <div class="label">CPU usage (interval)</div>
               <div class="value" id="cpu-pct">—</div>
-              <div class="sub" id="cpu-pct-sub">ultimi 2 min, normalizzato sui core</div>
+              <div class="sub" id="cpu-pct-sub">last 2 min, normalized over cores</div>
             </div>
             <div class="metric">
-              <div class="label">CPU totale</div>
+              <div class="label">Total CPU</div>
               <div class="value" id="cpu-total">—</div>
-              <div class="sub">dall'avvio del server</div>
+              <div class="sub">since server startup</div>
             </div>
             <div class="metric">
-              <div class="label">Campioni</div>
+              <div class="label">Samples</div>
               <div class="value" id="cpu-samples">—</div>
-              <div class="sub">registrati</div>
+              <div class="sub">recorded</div>
             </div>
             <div class="metric">
-              <div class="label">Ultimo campione</div>
+              <div class="label">Last sample</div>
               <div class="value" id="cpu-last-time">—</div>
               <div class="sub" id="cpu-last-sub">UTC</div>
             </div>
           </div>
           <canvas id="cpu-chart"></canvas>
           <div id="cpu-empty" class="cpu-empty" style="display:none">
-            Nessun campione disponibile. Il logger scrive ogni 2 minuti su <code>server_cpu.log</code>.
+            No samples available. The logger writes to <code>server_cpu.log</code> every 2 minutes.
           </div>
         </div>
       </div>
@@ -584,33 +584,33 @@
         <div class="tab-panel active" id="tab-chat">
           <div id="chat-log"></div>
           <div class="chat-input">
-            <input id="chat" type="text" placeholder='Scrivi al server…'>
-            <button class="primary" onclick="doChat()">Invia</button>
+            <input id="chat" type="text" placeholder='Message the server…'>
+            <button class="primary" onclick="doChat()">Send</button>
           </div>
         </div>
 
         <div class="tab-panel" id="tab-stats">
           <div class="stats-form">
             <div class="field">
-              <label>Da</label>
+              <label>From</label>
               <input id="stats-from" type="datetime-local">
             </div>
             <div class="field">
-              <label>A</label>
+              <label>To</label>
               <input id="stats-to" type="datetime-local">
             </div>
-            <button class="primary" onclick="doStats()">Calcola</button>
+            <button class="primary" onclick="doStats()">Compute</button>
           </div>
           <div id="stats-result">
-            <div class="stats-empty">Seleziona un intervallo e premi <strong>Calcola</strong>.</div>
+            <div class="stats-empty">Select an interval and press <strong>Compute</strong>.</div>
           </div>
         </div>
       </div>
 
-      <!-- Stato utente -->
+      <!-- User status -->
       <div class="card">
         <div class="card-header">
-          <h2>Stato utente</h2>
+          <h2>User status</h2>
         </div>
         <div class="card-body">
           <div class="status-list">
@@ -623,7 +623,7 @@
               <span class="v mono" id="st-token">—</span>
             </div>
             <div class="status-row">
-              <span class="k">Connessione</span>
+              <span class="k">Connection</span>
               <span class="v" id="st-conn">—</span>
             </div>
             <div class="status-row">
@@ -631,19 +631,19 @@
               <span class="v" id="st-trip">—</span>
             </div>
             <div class="status-row">
-              <span class="k">Stato moto</span>
+              <span class="k">Motion state</span>
               <span class="v" id="st-motion">—</span>
             </div>
             <div class="status-row">
-              <span class="k">Velocità</span>
+              <span class="k">Speed</span>
               <span class="v" id="st-speed">0 km/h</span>
             </div>
             <div class="status-row">
-              <span class="k">Durata trip</span>
+              <span class="k">Trip duration</span>
               <span class="v" id="st-duration">—</span>
             </div>
             <div class="status-row">
-              <span class="k">Distanza trip</span>
+              <span class="k">Trip distance</span>
               <span class="v" id="st-distance">—</span>
             </div>
           </div>
@@ -680,9 +680,9 @@ const app = {
   tripDistanceM: 0,
   pending: [],
   intentionalQuit: false,
-  // True quando la WS è stata aperta con una sessione salvata da riprendere
-  // tramite RESUME: serve a distinguere AUTH_OK / ERROR derivati dal resume
-  // automatico da quelli causati da un LOGIN / REGISTER manuale.
+  // True when the WS was opened with a saved session to resume via RESUME:
+  // needed to tell AUTH_OK / ERROR caused by the automatic resume apart
+  // from those caused by a manual LOGIN / REGISTER.
   resuming: false,
   send,
 };
@@ -703,7 +703,7 @@ function logLine(s, kind = "sys") {
 function setConn(state) {
   // state: "connecting" | "open" | "closed"
   const map = {
-    connecting: { cls: "warn", txt: "in connessione" },
+    connecting: { cls: "warn", txt: "connecting" },
     open:       { cls: "ok",   txt: "online" },
     closed:     { cls: "bad",  txt: "offline" },
   };
@@ -714,9 +714,9 @@ function setConn(state) {
     pill.innerHTML = `<span class="dot"></span><span>${m.txt}</span>`;
   }
   $("st-conn") && ($("st-conn").textContent = m.txt);
-  // Su schermata auth: se WS cade, mostra errore inline. Niente pill "online".
+  // On the auth screen: if the WS drops, show an inline error. No "online" pill.
   if (!isAuthenticated()) {
-    if (state === "closed") showAuthError("Server non raggiungibile. Riprova fra qualche secondo.");
+    if (state === "closed") showAuthError("Server unreachable. Try again in a few seconds.");
     else if (state === "open") clearAuthError();
   }
 }
@@ -727,22 +727,22 @@ function isAuthenticated() {
 
 // ------- Auth error UI -------
 const ERROR_MESSAGES = {
-  AUTH_FAILED:           "Username o password errati.",
-  REGISTER_FAILED:       "Registrazione non riuscita.",
-  ALREADY_AUTHENTICATED: "Sei già autenticato su questa connessione.",
-  BAD_REQUEST:           "Dati non validi.",
-  UNAUTHORIZED:          "Sessione scaduta. Effettua di nuovo l'accesso.",
+  AUTH_FAILED:           "Wrong username or password.",
+  REGISTER_FAILED:       "Registration failed.",
+  ALREADY_AUTHENTICATED: "You are already authenticated on this connection.",
+  BAD_REQUEST:           "Invalid data.",
+  UNAUTHORIZED:          "Session expired. Log in again.",
 };
 
 function friendlyError(code, raw) {
   const base = ERROR_MESSAGES[code];
   if (code === "REGISTER_FAILED" && raw) {
     const r = raw.toLowerCase();
-    if (r.includes("exist") || r.includes("già") || r.includes("duplicat")) return "Username già registrato.";
-    if (r.includes("username")) return "Username non valido (alfanumerici, '_' o '-').";
-    if (r.includes("password")) return "Password non valida.";
+    if (r.includes("exist") || r.includes("duplicat")) return "Username already registered.";
+    if (r.includes("username")) return "Invalid username (alphanumeric, '_' or '-').";
+    if (r.includes("password")) return "Invalid password.";
   }
-  return base || raw || "Errore sconosciuto.";
+  return base || raw || "Unknown error.";
 }
 
 function showAuthError(text) {
@@ -761,13 +761,13 @@ function setTripPill(active) {
   const pill = $("trip-pill");
   if (active) {
     pill.className = "pill ok";
-    pill.innerHTML = `<span class="dot"></span><span>Trip #${app.tripId} in corso</span>`;
+    pill.innerHTML = `<span class="dot"></span><span>Trip #${app.tripId} in progress</span>`;
     $("btn-trip").textContent = "End Trip";
     $("btn-trip").classList.remove("primary");
     $("btn-trip").classList.add("danger");
   } else {
     pill.className = "pill";
-    pill.innerHTML = `<span class="dot"></span><span>Nessun trip</span>`;
+    pill.innerHTML = `<span class="dot"></span><span>No trip</span>`;
     $("btn-trip").textContent = "Start Trip";
     $("btn-trip").classList.add("primary");
     $("btn-trip").classList.remove("danger");
@@ -777,9 +777,9 @@ function setTripPill(active) {
 
 function nowSecs() { return Math.floor(Date.now() / 1000); }
 
-// Chiavi sessionStorage per la persistenza della sessione tra refresh
-// pagina. Scope sessionStorage = tab corrente (resiste a F5, non sopravvive
-// alla chiusura del tab), coerente con la TTL lato server (`SESSION_IDLE_TTL`).
+// sessionStorage keys for persisting the session across page refreshes.
+// sessionStorage scope = current tab (survives F5, doesn't survive closing
+// the tab), consistent with the server-side TTL (`SESSION_IDLE_TTL`).
 const SS_TOKEN_KEY = "g7_token";
 const SS_USER_KEY  = "g7_user";
 
@@ -788,7 +788,7 @@ function loadStoredSession() {
     const token = sessionStorage.getItem(SS_TOKEN_KEY);
     const user  = sessionStorage.getItem(SS_USER_KEY);
     if (token && user) return { token, user };
-  } catch { /* sessionStorage può essere disabilitato in modalità privata */ }
+  } catch { /* sessionStorage can be disabled in private browsing mode */ }
   return null;
 }
 
@@ -814,16 +814,16 @@ function connect() {
   app.ws.onopen = () => {
     setConn("open");
     logLine("[ws] open");
-    // Se c'è una sessione salvata e siamo ancora in pagina di auth, prova
-    // a riprenderla automaticamente con RESUME. Se il server risponde
-    // UNAUTHORIZED (TTL scaduta o invalidata), `handleMessage` su ERROR
-    // pulisce il sessionStorage e l'utente vede la schermata di login.
+    // If there is a saved session and we are still on the auth page, try
+    // to resume it automatically with RESUME. If the server replies
+    // UNAUTHORIZED (TTL expired or invalidated), `handleMessage` on ERROR
+    // clears the sessionStorage and the user sees the login screen.
     if (!isAuthenticated() && !app.token) {
       const saved = loadStoredSession();
       if (saved) {
         app.resuming = true;
         app.username = saved.user;
-        logLine("[ws] tentativo resume sessione…");
+        logLine("[ws] attempting session resume…");
         const s = JSON.stringify({ type: "RESUME", token: saved.token });
         logLine("TX " + s, "tx");
         app.ws.send(s);
@@ -841,8 +841,8 @@ function connect() {
     setTripPill(false);
     if (window.despawn) window.despawn();
     if (app.intentionalQuit) {
-      // logout volontario: server chiude WS dopo DISCONNECT.
-      // Niente errore "Server non raggiungibile". Riapre WS per prossimo login.
+      // voluntary logout: the server closes the WS after DISCONNECT.
+      // No "Server unreachable" error. Reopens the WS for the next login.
       app.intentionalQuit = false;
       setTimeout(connect, 100);
       return;
@@ -861,9 +861,9 @@ function handleMessage(m) {
   switch (m.type) {
     case "AUTH_OK":
       app.token = m.token;
-      // Su LOGIN/REGISTER lo username viene dal campo input. Su RESUME
-      // il campo input è vuoto e lo username arriva da sessionStorage
-      // (impostato in `connect()` prima di mandare il RESUME).
+      // On LOGIN/REGISTER the username comes from the input field. On RESUME
+      // the input field is empty and the username comes from sessionStorage
+      // (set in `connect()` before sending the RESUME).
       if (!app.resuming) {
         const formUser = $("user").value.trim();
         if (formUser) app.username = formUser;
@@ -890,11 +890,11 @@ function handleMessage(m) {
       renderStats(m);
       break;
     case "ERROR":
-      // Errore durante un tentativo di RESUME: la sessione salvata non è
-      // più valida lato server (scaduta o invalidata). Pulisci storage,
-      // resetta lo stato e lascia che l'utente faccia login da zero.
-      // Nessun banner di errore: il timeout di sessione è normale e
-      // confonderebbe l'utente con un messaggio di "credenziali errate".
+      // Error during a RESUME attempt: the saved session is no longer
+      // valid on the server side (expired or invalidated). Clear the
+      // storage, reset the state and let the user log in from scratch.
+      // No error banner: a session timeout is normal and would confuse
+      // the user with a "wrong credentials" message.
       if (app.resuming) {
         app.resuming = false;
         app.username = null;
@@ -904,7 +904,7 @@ function handleMessage(m) {
       if (!isAuthenticated()) {
         showAuthError(friendlyError(m.code, m.message));
       } else {
-        appendSysMessage("Errore: " + (m.message || m.code));
+        appendSysMessage("Error: " + (m.message || m.code));
       }
       break;
     case "ACK":
@@ -915,7 +915,7 @@ function handleMessage(m) {
 function send(obj) {
   const s = JSON.stringify(obj);
   if (!app.ws || app.ws.readyState >= 2) {
-    logLine("[ws] riconnessione…");
+    logLine("[ws] reconnecting…");
     app.pending.push(s);
     connect();
     return;
@@ -929,7 +929,7 @@ function send(obj) {
 function showDashboard() {
   $("auth-screen").classList.add("hidden");
   $("dashboard").classList.remove("hidden");
-  // Leaflet ha bisogno di un invalidate dopo il display change
+  // Leaflet needs an invalidate after the display change
   setTimeout(() => window.map && window.map.invalidateSize(), 50);
 }
 function showAuth() {
@@ -940,11 +940,11 @@ function showAuth() {
 function validateCreds() {
   const u = $("user").value.trim();
   const p = $("pass").value;
-  if (!u) { showAuthError("Inserisci uno username."); return null; }
-  if (!/^[A-Za-z0-9_-]+$/.test(u)) { showAuthError("Username: solo lettere, numeri, '_' o '-'."); return null; }
-  if (u.length > 32) { showAuthError("Username troppo lungo (max 32)."); return null; }
-  if (!p) { showAuthError("Inserisci una password."); return null; }
-  if (p.length > 128) { showAuthError("Password troppo lunga (max 128)."); return null; }
+  if (!u) { showAuthError("Enter a username."); return null; }
+  if (!/^[A-Za-z0-9_-]+$/.test(u)) { showAuthError("Username: only letters, digits, '_' or '-'."); return null; }
+  if (u.length > 32) { showAuthError("Username too long (max 32)."); return null; }
+  if (!p) { showAuthError("Enter a password."); return null; }
+  if (p.length > 128) { showAuthError("Password too long (max 128)."); return null; }
   return { username: u, password: p };
 }
 function doRegister() { const c = validateCreds(); if (c) send({ type: "REGISTER", ...c }); }
@@ -956,25 +956,25 @@ function toggleTrip() {
 }
 
 function doStart() {
-  if (!app.token) return logLine("[!] login prima", "err");
-  if (!window.sim) return logLine("[!] simulatore non pronto", "err");
+  if (!app.token) return logLine("[!] log in first", "err");
+  if (!window.sim) return logLine("[!] simulator not ready", "err");
   app.tripTs = nowSecs();
   if (window.startTrail) window.startTrail();
   send({ type: "START_TRIP", token: app.token, lat: window.sim.lat, lon: window.sim.lon, ts: app.tripTs });
 }
 
 function doEnd() {
-  if (!app.token || !app.tripId) return logLine("[!] nessun trip aperto", "err");
+  if (!app.token || !app.tripId) return logLine("[!] no open trip", "err");
   send({ type: "END_TRIP", token: app.token, trip_id: app.tripId, ts: nowSecs() });
   app.tripActive = false;
   setTripPill(false);
 }
 
 function doChat() {
-  if (!app.token) return logLine("[!] login prima", "err");
+  if (!app.token) return logLine("[!] log in first", "err");
   const text = $("chat").value.trim();
   if (!text) return;
-  // Echo locale come messaggio "out"
+  // Local echo as an "out" message
   appendOwnMessage(text);
   send({ type: "CHAT", token: app.token, text });
   $("chat").value = "";
@@ -989,9 +989,9 @@ function doQuit() {
   app.token = null;
   app.tripId = null;
   app.username = null;
-  // Logout volontario: scarta la sessione persistente, così alla
-  // prossima apertura del tab non viene tentato un RESUME su un token
-  // che il server sta per invalidare con DISCONNECT.
+  // Voluntary logout: discard the persisted session, so that the next
+  // time the tab opens no RESUME is attempted on a token the server is
+  // about to invalidate with DISCONNECT.
   clearStoredSession();
   setTripPill(false);
   if (window.despawn) window.despawn();
@@ -1002,7 +1002,7 @@ function doQuit() {
 // ------- Chat rendering -------
 function appendChatMessage(from, text) {
   if (!from) { appendSysMessage(text); return; }
-  if (from === app.username) return; // già mostrato come "out"
+  if (from === app.username) return; // already shown as "out"
   const el = $("chat-log");
   const div = document.createElement("div");
   div.className = "msg in";
@@ -1028,7 +1028,7 @@ function appendSysMessage(text) {
 }
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c])); }
 
-// Enter su chat → invia
+// Enter in the chat box → send
 document.addEventListener("DOMContentLoaded", () => {
   $("chat").addEventListener("keydown", e => { if (e.key === "Enter") doChat(); });
   $("pass").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
@@ -1046,13 +1046,13 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Stats: precompila intervallo = ultime 24h
+  // Stats: prefill the interval = last 24h
   const now = new Date();
   const yesterday = new Date(now.getTime() - 24 * 3600 * 1000);
   $("stats-from").value = toLocalISO(yesterday);
   $("stats-to").value = toLocalISO(now);
 
-  // CPU: prima fetch + auto-refresh allineato al campionamento server (130s).
+  // CPU: first fetch + auto-refresh aligned with the server sampling (130s).
   refreshCpu();
   setInterval(refreshCpu, 130_000);
 });
@@ -1064,13 +1064,13 @@ function toLocalISO(d) {
 
 // ------- Stats -------
 function doStats() {
-  if (!app.token) return logLine("[!] login prima", "err");
+  if (!app.token) return logLine("[!] log in first", "err");
   const from = $("stats-from").value;
   const to = $("stats-to").value;
   if (!from || !to) return;
   const from_ts = Math.floor(new Date(from).getTime() / 1000);
   const to_ts   = Math.floor(new Date(to).getTime() / 1000);
-  $("stats-result").innerHTML = `<div class="stats-empty">Calcolo in corso…</div>`;
+  $("stats-result").innerHTML = `<div class="stats-empty">Computing…</div>`;
   send({ type: "STATS", token: app.token, from_ts, to_ts });
 }
 
@@ -1081,11 +1081,11 @@ function renderStats(m) {
   const total = fmtDuration(m.total_secs);
   $("stats-result").innerHTML = `
     <div class="stats-grid">
-      <div class="metric"><div class="label">Distanza</div><div class="value">${km}<span style="font-size:.7em;color:var(--text-muted)"> km</span></div></div>
-      <div class="metric"><div class="label">Vel. media</div><div class="value">${m.avg_speed_kmh.toFixed(1)}<span style="font-size:.7em;color:var(--text-muted)"> km/h</span></div></div>
-      <div class="metric"><div class="label">In movimento</div><div class="value" style="font-size:1.1rem">${move}</div></div>
-      <div class="metric"><div class="label">In pausa</div><div class="value" style="font-size:1.1rem">${pause}</div></div>
-      <div class="metric"><div class="label">Totale</div><div class="value" style="font-size:1.1rem">${total}</div></div>
+      <div class="metric"><div class="label">Distance</div><div class="value">${km}<span style="font-size:.7em;color:var(--text-muted)"> km</span></div></div>
+      <div class="metric"><div class="label">Avg speed</div><div class="value">${m.avg_speed_kmh.toFixed(1)}<span style="font-size:.7em;color:var(--text-muted)"> km/h</span></div></div>
+      <div class="metric"><div class="label">Moving</div><div class="value" style="font-size:1.1rem">${move}</div></div>
+      <div class="metric"><div class="label">Paused</div><div class="value" style="font-size:1.1rem">${pause}</div></div>
+      <div class="metric"><div class="label">Total</div><div class="value" style="font-size:1.1rem">${total}</div></div>
     </div>
   `;
 }
@@ -1113,14 +1113,15 @@ async function refreshCpu() {
   }
 }
 
-// Parse righe nel formato:
-//   "[wall] [HH:MM:SS UTC]  cpu_totale=N.NNNs  cpu_intervallo_2min=N.NNNs  cpu_pct=N.NN%  cores=N"
-// Il campo `cores` è stato aggiunto in seguito: regex tollerante alle righe
-// vecchie senza `cores` (default 1) per non rompere log pre-esistenti.
+// Parses lines in the format:
+//   "[wall] [HH:MM:SS UTC]  cpu_total=N.NNNs  cpu_interval_2min=N.NNNs  cpu_pct=N.NN%  cores=N"
+// The `cores` field was added later: the regex tolerates old lines without
+// `cores` (default 1) so pre-existing logs don't break. It also accepts the
+// legacy Italian keys (`cpu_totale`, `cpu_intervallo_2min`) from older logs.
 function parseCpuLog(txt) {
   const out = [];
   for (const line of txt.split(/\r?\n/)) {
-    const m = line.match(/^\[(\d+)\]\s+\[(\d{2}:\d{2}:\d{2})\s+UTC\]\s+cpu_totale=([\d.]+)s\s+cpu_intervallo_2min=([\d.]+)s\s+cpu_pct=([\d.]+)%(?:\s+cores=(\d+))?/);
+    const m = line.match(/^\[(\d+)\]\s+\[(\d{2}:\d{2}:\d{2})\s+UTC\]\s+cpu_tota?le?=([\d.]+)s\s+cpu_interval(?:lo)?_2min=([\d.]+)s\s+cpu_pct=([\d.]+)%(?:\s+cores=(\d+))?/);
     if (!m) continue;
     out.push({
       wall: +m[1],
@@ -1143,7 +1144,7 @@ function renderCpu(samples) {
     $("cpu-total").textContent = "—";
     $("cpu-samples").textContent = "0";
     $("cpu-last-time").textContent = "—";
-    $("cpu-pct-sub").textContent = "ultimi 2 min";
+    $("cpu-pct-sub").textContent = "last 2 min";
     lastCpuSample = null;
     drawCpuChart([]);
     return;
@@ -1151,16 +1152,16 @@ function renderCpu(samples) {
   $("cpu-empty").style.display = "none";
   const last = samples[samples.length - 1];
   lastCpuSample = last;
-  // Mostra esattamente i valori scritti nel log: `cpu_pct` normalizzato sui
-  // core con 2 decimali, e `cpu_intervallo_2min` in secondi con 3 decimali.
+  // Show exactly the values written in the log: `cpu_pct` normalized over
+  // the cores with 2 decimals, and `cpu_interval_2min` in seconds with 3 decimals.
   $("cpu-pct").innerHTML = `${last.pct.toFixed(2)}<span style="font-size:.7em;color:var(--text-muted)"> %</span>`;
   $("cpu-pct-sub").textContent =
-    `cpu_intervallo_2min=${last.interval.toFixed(3)}s su ${last.cores} core`;
+    `cpu_interval_2min=${last.interval.toFixed(3)}s over ${last.cores} cores`;
   $("cpu-total").innerHTML = formatCpuTotal(last.total);
   $("cpu-samples").textContent = samples.length;
-  // Server scrive l'orario in UTC. Mostra al posto suo l'ora locale del
-  // browser (es. Europe/Rome), così l'utente confronta con l'orologio di
-  // sistema senza dover fare la conversione a mente.
+  // The server writes the time in UTC. Show the browser's local time
+  // instead (e.g. Europe/Rome), so the user can compare with the system
+  // clock without doing the conversion in their head.
   const localDate = new Date(last.wall * 1000);
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "local";
   const hh = String(localDate.getHours()).padStart(2, "0");
@@ -1171,8 +1172,8 @@ function renderCpu(samples) {
   drawCpuChart(samples);
 }
 
-// Mostra CPU totale come durata leggibile (es. "3h 12m") invece di secondi
-// grezzi. Sotto i 60 secondi mantiene la notazione `Ns`.
+// Shows total CPU as a readable duration (e.g. "3h 12m") instead of raw
+// seconds. Below 60 seconds it keeps the `Ns` notation.
 function formatCpuTotal(secs) {
   if (secs < 60) {
     return `${secs.toFixed(1)}<span style="font-size:.7em;color:var(--text-muted)"> s</span>`;
@@ -1197,19 +1198,19 @@ function drawCpuChart(samples) {
   ctx.clearRect(0, 0, w, h);
   if (!samples.length) return;
 
-  const pts = samples.slice(-60); // ultimi 60 campioni
+  const pts = samples.slice(-60); // last 60 samples
   const maxP = Math.max(1, ...pts.map(s => s.pct));
   const pad = 6;
   const stepX = (w - pad * 2) / Math.max(1, pts.length - 1);
 
-  // Linea
+  // Line
   ctx.beginPath();
   pts.forEach((s, i) => {
     const x = pad + i * stepX;
     const y = h - pad - (s.pct / maxP) * (h - pad * 2);
     if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
   });
-  // Area sotto la curva
+  // Area under the curve
   const grad = ctx.createLinearGradient(0, 0, 0, h);
   grad.addColorStop(0, "rgba(79, 140, 255, 0.35)");
   grad.addColorStop(1, "rgba(79, 140, 255, 0.02)");
@@ -1219,7 +1220,7 @@ function drawCpuChart(samples) {
   ctx.fillStyle = grad;
   ctx.fill();
 
-  // Linea sopra
+  // Line on top
   ctx.beginPath();
   pts.forEach((s, i) => {
     const x = pad + i * stepX;
@@ -1253,12 +1254,12 @@ const FOLLOW_ZOOM = 16;
 
 await init();
 const graphJson = await fetch("/data/graph.json").then(r => {
-  if (!r.ok) throw new Error("graph.json non trovato (genera con tools/export_turin_graph.py)");
+  if (!r.ok) throw new Error("graph.json not found (generate with tools/export_turin_graph.py)");
   return r.text();
 });
 window.sim = null;
 
-// Mappa: tile layer scuro per matching col tema
+// Map: dark tile layer to match the theme
 const map = L.map("map", { zoomControl: true, attributionControl: true }).setView(CENTER, 13);
 window.map = map;
 L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
@@ -1270,7 +1271,7 @@ L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
 window.followUser = true;
 map.on("dragstart", () => { window.followUser = false; });
 
-// Pallino e scia
+// Dot and trail
 const dotIcon = L.divIcon({
   className: "",
   html: '<div style="width:14px;height:14px;border-radius:50%;background:#4f8cff;border:3px solid #fff;box-shadow:0 0 12px rgba(79,140,255,.75)"></div>',
@@ -1306,7 +1307,7 @@ let sinceSend = 0;
 let wasActive = false;
 let lastLat = null, lastLon = null;
 
-// Distanza Haversine (m) per stima distanza trip lato client.
+// Haversine distance (m) for client-side trip distance estimation.
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371000;
   const toRad = d => d * Math.PI / 180;
@@ -1335,7 +1336,7 @@ setInterval(() => {
   const lat = sim.lat, lon = sim.lon;
 
   marker.setLatLng([lat, lon]);
-  document.getElementById("st-motion").textContent = sim.moving ? "in movimento" : "fermo";
+  document.getElementById("st-motion").textContent = sim.moving ? "moving" : "stationary";
   document.getElementById("st-speed").textContent  = sim.moving ? `${sim.speed_kmh.toFixed(0)} km/h` : "0 km/h";
 
   if (window.followUser) map.setView([lat, lon], map.getZoom(), { animate: false });
@@ -1351,7 +1352,7 @@ setInterval(() => {
     }
     if (sim.moving) trail.addLatLng([lat, lon]);
 
-    // Live stats lato Stato utente
+    // Live stats in the User status panel
     const durSec = (Date.now() - app.tripStartMs) / 1000;
     document.getElementById("st-duration").textContent = fmt(durSec);
     document.getElementById("st-distance").textContent = (app.tripDistanceM / 1000).toFixed(2) + " km";

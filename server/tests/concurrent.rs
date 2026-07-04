@@ -1,5 +1,5 @@
-// Test concorrenti: più client paralleli sullo stesso server.
-// Prerequisito: `cargo build -p server`.
+// Concurrency tests: multiple parallel clients on the same server.
+// Prerequisite: `cargo build -p server`.
 use common::{decode, encode, Message};
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
@@ -57,7 +57,7 @@ impl Harness {
                 break;
             }
             if std::time::Instant::now() > deadline {
-                panic!("server non si avvia entro 5s");
+                panic!("server did not start within 5s");
             }
             std::thread::sleep(Duration::from_millis(50));
         }
@@ -104,12 +104,12 @@ impl Client {
         loop {
             let item = timeout(IO_TIMEOUT, self.reader.next())
                 .await
-                .expect("timeout su recv")
-                .expect("stream chiuso")
+                .expect("timeout on recv")
+                .expect("stream closed")
                 .expect("ws error");
             match item {
                 WsMessage::Text(t) => return decode(&t).unwrap(),
-                WsMessage::Close(_) => panic!("conn chiusa"),
+                WsMessage::Close(_) => panic!("conn closed"),
                 _ => continue,
             }
         }
@@ -129,7 +129,7 @@ impl Client {
     async fn assert_silent(&mut self, dur: Duration) {
         loop {
             match timeout(dur, self.reader.next()).await {
-                Ok(Some(Ok(WsMessage::Text(t)))) => panic!("atteso silenzio, ricevuto: {t}"),
+                Ok(Some(Ok(WsMessage::Text(t)))) => panic!("expected silence, got: {t}"),
                 Ok(Some(Ok(_))) => continue,
                 _ => return,
             }
@@ -148,7 +148,7 @@ impl Client {
     async fn register_ok(&mut self, user: &str, pass: &str) -> String {
         match self.register(user, pass).await {
             Message::AuthOk { token } => token,
-            other => panic!("atteso AuthOk per {user}, ricevuto {other:?}"),
+            other => panic!("expected AuthOk for {user}, got {other:?}"),
         }
     }
 
@@ -162,13 +162,13 @@ impl Client {
         .await;
         match self.recv().await {
             Message::TripStarted { trip_id, .. } => trip_id,
-            other => panic!("atteso TripStarted, ricevuto {other:?}"),
+            other => panic!("expected TripStarted, got {other:?}"),
         }
     }
 }
 
 #[tokio::test]
-async fn register_n_utenti_paralleli_tutti_ok() {
+async fn register_n_parallel_users_all_ok() {
     let h = Harness::start();
     let addr = h.addr.clone();
 
@@ -190,11 +190,11 @@ async fn register_n_utenti_paralleli_tutti_ok() {
     let mut sorted = tokens.clone();
     sorted.sort();
     sorted.dedup();
-    assert_eq!(sorted.len(), n, "token duplicati: {tokens:?}");
+    assert_eq!(sorted.len(), n, "duplicate tokens: {tokens:?}");
 }
 
 #[tokio::test]
-async fn register_concorrenti_stesso_username_solo_uno_ok() {
+async fn concurrent_registers_same_username_only_one_ok() {
     let h = Harness::start();
     let addr = h.addr.clone();
 
@@ -204,7 +204,7 @@ async fn register_concorrenti_stesso_username_solo_uno_ok() {
         let addr = addr.clone();
         handles.push(tokio::spawn(async move {
             let mut c = Client::connect(&addr).await;
-            c.register("duplicato", "secret").await
+            c.register("duplicate", "secret").await
         }));
     }
 
@@ -214,19 +214,19 @@ async fn register_concorrenti_stesso_username_solo_uno_ok() {
         match h.await.unwrap() {
             Message::AuthOk { .. } => ok_count += 1,
             Message::Error { .. } => err_count += 1,
-            other => panic!("risposta inattesa: {other:?}"),
+            other => panic!("unexpected response: {other:?}"),
         }
     }
-    assert_eq!(ok_count, 1, "atteso esattamente 1 AuthOk, ne ho {ok_count}");
+    assert_eq!(ok_count, 1, "expected exactly 1 AuthOk, got {ok_count}");
     assert_eq!(err_count, n - 1);
 }
 
 #[tokio::test]
-async fn chat_da_client_va_solo_al_server_e_non_e_inoltrata() {
-    // Nuovo modello: il client parla SOLO col server. Un ChatToServer
-    // produce un Ack al mittente e non viene inoltrato a nessun altro
-    // client. I messaggi verso i client li origina solo il server (admin
-    // CLI), non sono verificabili da qui.
+async fn chat_from_client_goes_only_to_server_and_is_not_forwarded() {
+    // New model: the client talks ONLY to the server. A ChatToServer
+    // produces an Ack to the sender and is not forwarded to any other
+    // client. Messages towards clients originate only from the server
+    // (admin CLI), which cannot be verified from here.
     let h = Harness::start();
     let addr = h.addr.clone();
 
@@ -241,19 +241,19 @@ async fn chat_da_client_va_solo_al_server_e_non_e_inoltrata() {
     alice
         .send(&Message::ChatToServer {
             token: alice_tok,
-            text: "ciao server".into(),
+            text: "hello server".into(),
         })
         .await;
 
     assert!(matches!(alice.recv().await, Message::Ack));
 
-    // Né bob né carol devono ricevere nulla.
+    // Neither bob nor carol must receive anything.
     bob.assert_silent(Duration::from_millis(300)).await;
     carol.assert_silent(Duration::from_millis(300)).await;
 }
 
 #[tokio::test]
-async fn trip_paralleli_tutti_ricevono_id_distinti() {
+async fn parallel_trips_all_receive_distinct_ids() {
     let h = Harness::start();
     let addr = h.addr.clone();
 
@@ -274,11 +274,11 @@ async fn trip_paralleli_tutti_ricevono_id_distinti() {
     let mut sorted = ids.clone();
     sorted.sort();
     sorted.dedup();
-    assert_eq!(sorted.len(), n, "trip_id duplicati: {ids:?}");
+    assert_eq!(sorted.len(), n, "duplicate trip_ids: {ids:?}");
 }
 
 #[tokio::test]
-async fn end_trip_di_altro_utente_fallisce() {
+async fn end_trip_of_another_user_fails() {
     let h = Harness::start();
     let addr = h.addr.clone();
 
@@ -298,19 +298,19 @@ async fn end_trip_di_altro_utente_fallisce() {
     .await;
     match bob.recv().await {
         Message::Error { code, .. } => assert_eq!(code, "BAD_REQUEST"),
-        other => panic!("atteso Error, ricevuto {other:?}"),
+        other => panic!("expected Error, got {other:?}"),
     }
 }
 
 #[tokio::test]
-async fn secondo_login_stesso_user_rifiutato() {
+async fn second_login_same_user_rejected() {
     let h = Harness::start();
     let addr = h.addr.clone();
 
     let mut c1 = Client::connect(&addr).await;
     c1.register_ok("mario", "secret").await;
 
-    // Seconda conn tenta login per stesso utente -> ERROR.
+    // A second connection attempts a login for the same user -> ERROR.
     let mut c2 = Client::connect(&addr).await;
     c2.send(&Message::Login {
         username: "mario".into(),
@@ -320,20 +320,20 @@ async fn secondo_login_stesso_user_rifiutato() {
     match c2.recv().await {
         Message::Error { code, message } => {
             assert_eq!(code, "AUTH_FAILED");
-            assert!(message.contains("già loggato"));
+            assert!(message.contains("already logged in"));
         }
-        other => panic!("atteso Error, ricevuto {other:?}"),
+        other => panic!("expected Error, got {other:?}"),
     }
 }
 
 #[tokio::test]
-async fn relogin_stesso_utente_stessa_conn_rifiutato() {
+async fn relogin_same_user_same_conn_rejected() {
     let h = Harness::start();
     let mut c = Client::connect(&h.addr).await;
     c.register_ok("mario", "secret").await;
 
-    // Secondo login per lo stesso utente sulla STESSA connessione: ridondante,
-    // niente nuovo AUTH_OK.
+    // Second login for the same user on the SAME connection: redundant,
+    // no new AUTH_OK.
     c.send(&Message::Login {
         username: "mario".into(),
         password: "secret".into(),
@@ -341,12 +341,12 @@ async fn relogin_stesso_utente_stessa_conn_rifiutato() {
     .await;
     match c.recv().await {
         Message::Error { code, .. } => assert_eq!(code, "ALREADY_AUTHENTICATED"),
-        other => panic!("atteso Error ALREADY_AUTHENTICATED, ricevuto {other:?}"),
+        other => panic!("expected Error ALREADY_AUTHENTICATED, got {other:?}"),
     }
 }
 
 #[tokio::test]
-async fn dopo_disconnect_altro_puo_loggare() {
+async fn after_disconnect_another_login_is_possible() {
     let h = Harness::start();
     let addr = h.addr.clone();
 
@@ -354,7 +354,7 @@ async fn dopo_disconnect_altro_puo_loggare() {
     let token = c1.register_ok("mario", "secret").await;
     c1.send(&Message::Disconnect { token }).await;
     assert!(matches!(c1.recv().await, Message::Ack));
-    // Aspetta che la conn 1 chiuda lato server (Close frame + cleanup token).
+    // Wait for conn 1 to close on the server side (Close frame + token cleanup).
     let _ = c1.recv_opt().await;
 
     let mut c2 = Client::connect(&addr).await;
@@ -367,12 +367,12 @@ async fn dopo_disconnect_altro_puo_loggare() {
 }
 
 #[tokio::test]
-async fn disconnect_chiude_la_connessione() {
+async fn disconnect_closes_the_connection() {
     let h = Harness::start();
     let mut c = Client::connect(&h.addr).await;
     let token = c.register_ok("disc", "secret").await;
 
     c.send(&Message::Disconnect { token }).await;
     assert!(matches!(c.recv().await, Message::Ack));
-    assert!(c.recv_opt().await.is_none(), "atteso EOF dopo Disconnect");
+    assert!(c.recv_opt().await.is_none(), "expected EOF after Disconnect");
 }

@@ -6,7 +6,7 @@ use db::{
 use uuid::Uuid;
 
 async fn create_token() -> String {
-    // Manteniamo il loop di sicurezza ma quasi sempre esce alla prima iterazione.
+    // Keep the safety loop, but it almost always exits on the first iteration.
     loop {
         let token = Uuid::new_v4().to_string();
         if get_user_by_token(&token).await.is_none() {
@@ -15,38 +15,38 @@ async fn create_token() -> String {
     }
 }
 
-/// Esegue il login. Ritorna (username, token).
+/// Performs the login. Returns (username, token).
 pub async fn login(msg: &Message) -> Result<(String, String)> {
     let (username, password) = match msg {
         Message::Login { username, password } => (username.clone(), password.clone()),
-        _ => return Err(anyhow!("messaggio non valido")),
+        _ => return Err(anyhow!("invalid message")),
     };
     validate_username(&username).map_err(|e| anyhow!(e))?;
     validate_password(&password).map_err(|e| anyhow!(e))?;
 
     if !key_exists(&username).await? {
-        return Err(anyhow!("credenziali non valide"));
+        return Err(anyhow!("invalid credentials"));
     }
     check_credentials(msg)
         .await
-        .map_err(|_| anyhow!("credenziali non valide"))?;
+        .map_err(|_| anyhow!("invalid credentials"))?;
 
     let token = create_token().await;
     try_insert_token(&username, &token).await?;
     Ok((username, token))
 }
 
-/// Registra un nuovo utente. Ritorna (username, token).
+/// Registers a new user. Returns (username, token).
 pub async fn register(msg: &Message) -> Result<(String, String)> {
     let (username, password) = match msg {
         Message::Register { username, password } => (username.clone(), password.clone()),
-        _ => return Err(anyhow!("messaggio non valido")),
+        _ => return Err(anyhow!("invalid message")),
     };
     validate_username(&username).map_err(|e| anyhow!(e))?;
     validate_password(&password).map_err(|e| anyhow!(e))?;
 
     if key_exists(&username).await? {
-        return Err(anyhow!("utente esiste già"));
+        return Err(anyhow!("user already exists"));
     }
     save_register(msg).await?;
 
@@ -56,8 +56,8 @@ pub async fn register(msg: &Message) -> Result<(String, String)> {
 }
 
 // --- TESTS ---
-// I test scrivono su users.json globale: lancia con --test-threads=1
-// oppure setta USERS_DB_PATH/POSITIONS_DB_PATH a percorsi unici.
+// The tests write to a global users.json: run with --test-threads=1
+// or set USERS_DB_PATH/POSITIONS_DB_PATH to unique paths.
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -88,7 +88,7 @@ mod tests {
 
 
     #[tokio::test]
-    async fn register_nuovo_utente_restituisce_token() {
+    async fn register_new_user_returns_token() {
         let _g = TEST_GUARD.lock().unwrap_or_else(|p| p.into_inner());
         setup().await;
         let msg = Message::Register {
@@ -98,11 +98,11 @@ mod tests {
         let (user, token) = register(&msg).await.expect("register");
         assert_eq!(user, "mario");
         assert!(!token.is_empty());
-    
+
     }
 
     #[tokio::test]
-    async fn register_utente_duplicato_restituisce_errore() {
+    async fn register_duplicate_user_returns_error() {
         let _g = TEST_GUARD.lock().unwrap_or_else(|p| p.into_inner());
         setup().await;
         let msg = Message::Register {
@@ -111,11 +111,11 @@ mod tests {
         };
         register(&msg).await.unwrap();
         assert!(register(&msg).await.is_err());
-        
+
     }
 
     #[tokio::test]
-    async fn register_con_messaggio_sbagliato_restituisce_errore() {
+    async fn register_with_wrong_message_returns_error() {
         let _g = TEST_GUARD.lock().unwrap_or_else(|p| p.into_inner());
         setup().await;
         let msg = Message::Login {
@@ -123,11 +123,11 @@ mod tests {
             password: "secret".into(),
         };
         assert!(register(&msg).await.is_err());
-        
+
     }
 
     #[tokio::test]
-    async fn login_ok_restituisce_token() {
+    async fn login_ok_returns_token() {
         let _g = TEST_GUARD.lock().unwrap_or_else(|p| p.into_inner());
         setup().await;
         let reg = Message::Register {
@@ -135,7 +135,7 @@ mod tests {
             password: "secret".into(),
         };
         let (_, t0) = register(&reg).await.unwrap();
-        // Simula "disconnect" prima del re-login (single-session policy).
+        // Simulate a "disconnect" before the re-login (single-session policy).
         db::invalidate_token(&t0).await;
         let login_msg = Message::Login {
             username: "mario".into(),
@@ -144,11 +144,11 @@ mod tests {
         let (user, token) = login(&login_msg).await.unwrap();
         assert_eq!(user, "mario");
         assert!(!token.is_empty());
-        
+
     }
 
     #[tokio::test]
-    async fn login_secondo_da_altra_sessione_fallisce() {
+    async fn second_login_from_another_session_fails() {
         let _g = TEST_GUARD.lock().unwrap_or_else(|p| p.into_inner());
         setup().await;
         let reg = Message::Register {
@@ -156,33 +156,33 @@ mod tests {
             password: "secret".into(),
         };
         register(&reg).await.unwrap();
-        // Token di register attivo → secondo login deve fallire.
+        // Register token still active → a second login must fail.
         let login_msg = Message::Login {
             username: "mario".into(),
             password: "secret".into(),
         };
         let err = login(&login_msg).await.unwrap_err().to_string();
         assert!(
-            err.contains("già loggato"),
-            "errore atteso single-session, ottenuto: {err}"
+            err.contains("already logged in"),
+            "expected single-session error, got: {err}"
         );
-        
+
     }
 
     #[tokio::test]
-    async fn login_utente_inesistente_restituisce_errore() {
+    async fn login_nonexistent_user_returns_error() {
         let _g = TEST_GUARD.lock().unwrap_or_else(|p| p.into_inner());
         setup().await;
         let msg = Message::Login {
-            username: "fantasma".into(),
+            username: "ghost".into(),
             password: "secret".into(),
         };
         assert!(login(&msg).await.is_err());
-       
+
     }
 
     #[tokio::test]
-    async fn login_password_sbagliata_restituisce_errore() {
+    async fn login_wrong_password_returns_error() {
         let _g = TEST_GUARD.lock().unwrap_or_else(|p| p.into_inner());
         setup().await;
         let reg = Message::Register {
@@ -192,14 +192,14 @@ mod tests {
         register(&reg).await.unwrap();
         let login_msg = Message::Login {
             username: "mario".into(),
-            password: "sbagliata".into(),
+            password: "wrongpass".into(),
         };
         assert!(login(&login_msg).await.is_err());
-    
+
     }
 
     #[tokio::test]
-    async fn login_con_messaggio_sbagliato_restituisce_errore() {
+    async fn login_with_wrong_message_returns_error() {
         let _g = TEST_GUARD.lock().unwrap_or_else(|p| p.into_inner());
         setup().await;
         let msg = Message::Register {
@@ -207,11 +207,11 @@ mod tests {
             password: "secret".into(),
         };
         assert!(login(&msg).await.is_err());
-      
+
     }
 
     #[tokio::test]
-    async fn due_registrazioni_diverse_hanno_token_diversi() {
+    async fn two_different_registrations_have_different_tokens() {
         let _g = TEST_GUARD.lock().unwrap_or_else(|p| p.into_inner());
         setup().await;
         let msg1 = Message::Register {
@@ -225,11 +225,11 @@ mod tests {
         let (_, t1) = register(&msg1).await.unwrap();
         let (_, t2) = register(&msg2).await.unwrap();
         assert_ne!(t1, t2);
-     
+
     }
 
     #[tokio::test]
-    async fn token_generato_e_valido_in_sessione() {
+    async fn token_generated_and_valid_in_session() {
         let _g = TEST_GUARD.lock().unwrap_or_else(|p| p.into_inner());
         setup().await;
         let msg = Message::Register {
@@ -237,8 +237,8 @@ mod tests {
             password: "secret".into(),
         };
         let (_, token) = register(&msg).await.unwrap();
-        let utente = db::get_user_by_token(&token).await;
-        assert_eq!(utente, Some("mario".to_string()));
-        
+        let user = db::get_user_by_token(&token).await;
+        assert_eq!(user, Some("mario".to_string()));
+
     }
 }

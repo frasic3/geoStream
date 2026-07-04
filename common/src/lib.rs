@@ -49,14 +49,14 @@ pub enum Message {
     },
 
     #[serde(rename = "STATS")]
-    Stats { //necessario per le statistiche 
+    Stats { //needed for the statistics
         token: String,
-        from_ts: i64, // timestamp inizio intervallo (epoch seconds)
-        to_ts: i64, // timestamp fine intervallo (epoch seconds)
+        from_ts: i64, // interval start timestamp (epoch seconds)
+        to_ts: i64, // interval end timestamp (epoch seconds)
     },
 
     #[serde(rename = "STATS_RESULT")]
-    StatsResult { //risultato delle statistiche 
+    StatsResult { //statistics result
         username: String,
         from_ts: i64,
         to_ts: i64,
@@ -75,17 +75,17 @@ pub enum Message {
     #[serde(rename = "ERROR")]
     Error { code: String, message: String },
 
-    // Messaggio di chat inviato dal client al server.
-    // - `token`: identifica l'utente autenticato (ricevuto da AUTH_OK).
-    // - `text`: testo del messaggio da inoltrare in chat.
+    // Chat message sent from the client to the server.
+    // - `token`: identifies the authenticated user (received via AUTH_OK).
+    // - `text`: text of the message to forward to the chat.
     #[serde(rename = "CHAT")]
     ChatToServer { token: String, text: String },
 
-    // Messaggio di chat che il server invia ai client.
-    // - `from`: mittente. Se assente (None) il messaggio è un annuncio/broadcast
-    //   di sistema; se presente è un messaggio inviato da un altro utente.
-    //   `skip_serializing_if` evita di scrivere il campo nel JSON quando è None.
-    // - `text`: testo del messaggio ricevuto.
+    // Chat message that the server sends to clients.
+    // - `from`: sender. If absent (None) the message is a system
+    //   announcement/broadcast; if present it is a message sent by another user.
+    //   `skip_serializing_if` avoids writing the field into the JSON when it is None.
+    // - `text`: text of the received message.
     #[serde(rename = "MESSAGE")]
     ChatFromServer {
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -107,36 +107,36 @@ pub fn decode(line: &str) -> serde_json::Result<Message> {
 
 pub fn validate_username(u: &str) -> Result<(), &'static str> {
     if u.is_empty() {
-        return Err("username vuoto");
+        return Err("empty username");
     }
     if u.len() > MAX_USERNAME_LEN {
-        return Err("username troppo lungo");
+        return Err("username too long");
     }
     if !u
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
     {
-        return Err("username: solo caratteri alfanumerici, '_' o '-'");
+        return Err("username: only alphanumeric characters, '_' or '-'");
     }
     Ok(())
 }
 
 pub fn validate_password(p: &str) -> Result<(), &'static str> {
     if p.len() < 4 {
-        return Err("password troppo corta (min 4)");
+        return Err("password too short (min 4)");
     }
     if p.len() > MAX_PASSWORD_LEN {
-        return Err("password troppo lunga");
+        return Err("password too long");
     }
     Ok(())
 }
 
 pub fn validate_chat(t: &str) -> Result<(), &'static str> {
     if t.is_empty() {
-        return Err("messaggio vuoto");
+        return Err("empty message");
     }
     if t.len() > MAX_CHAT_LEN {
-        return Err("messaggio troppo lungo");
+        return Err("message too long");
     }
     Ok(())
 }
@@ -248,7 +248,7 @@ mod tests {
     fn roundtrip_error() {
         roundtrip(Message::Error {
             code: "AUTH_FAILED".into(),
-            message: "credenziali non valide".into(),
+            message: "invalid credentials".into(),
         });
     }
 
@@ -264,7 +264,7 @@ mod tests {
     fn roundtrip_chat_from_server_broadcast() {
         roundtrip(Message::ChatFromServer {
             from: None,
-            text: "annuncio".into(),
+            text: "announcement".into(),
         });
     }
 
@@ -272,7 +272,7 @@ mod tests {
     fn roundtrip_chat_from_server_direct() {
         roundtrip(Message::ChatFromServer {
             from: Some("mario".into()),
-            text: "ciao".into(),
+            text: "hi".into(),
         });
     }
 
@@ -304,12 +304,12 @@ mod tests {
     fn chat_to_server_wire_format() {
         let msg = Message::ChatToServer {
             token: "abc123".into(),
-            text: "ciao".into(),
+            text: "hi".into(),
         };
         let json = encode(&msg).unwrap();
         assert_eq!(
             json,
-            "{\"type\":\"CHAT\",\"token\":\"abc123\",\"text\":\"ciao\"}"
+            "{\"type\":\"CHAT\",\"token\":\"abc123\",\"text\":\"hi\"}"
         );
     }
 
@@ -317,12 +317,12 @@ mod tests {
     fn chat_from_server_direct_wire_format() {
         let msg = Message::ChatFromServer {
             from: Some("mario".into()),
-            text: "ciao".into(),
+            text: "hi".into(),
         };
         let json = encode(&msg).unwrap();
         assert_eq!(
             json,
-            "{\"type\":\"MESSAGE\",\"from\":\"mario\",\"text\":\"ciao\"}"
+            "{\"type\":\"MESSAGE\",\"from\":\"mario\",\"text\":\"hi\"}"
         );
     }
 
@@ -330,10 +330,10 @@ mod tests {
     fn chat_from_server_broadcast_wire_format() {
         let msg = Message::ChatFromServer {
             from: None,
-            text: "annuncio".into(),
+            text: "announcement".into(),
         };
         let json = encode(&msg).unwrap();
-        assert_eq!(json, "{\"type\":\"MESSAGE\",\"text\":\"annuncio\"}");
+        assert_eq!(json, "{\"type\":\"MESSAGE\",\"text\":\"announcement\"}");
     }
 
     #[test]

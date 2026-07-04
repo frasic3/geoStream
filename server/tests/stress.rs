@@ -1,10 +1,10 @@
-// Stress test CPU: gli utenti si registrano uno alla volta ogni
-// STRESS_TRICKLE_DELAY_MS ms. Misura CPU% del server (via sysinfo,
-// normalizzata sui core logici come cpu_log.rs) e latenza del register.
-// `#[ignore]`: lancia con
+// CPU stress test: users register one at a time every
+// STRESS_TRICKLE_DELAY_MS ms. Measures the server's CPU% (via sysinfo,
+// normalized over logical cores like cpu_log.rs) and register latency.
+// `#[ignore]`: run with
 //   cargo build --release -p server
 //   cargo test --release --test stress -- --ignored --nocapture
-// Riferimento (16 core): 1/0,1s -> ~2,8% CPU ~135ms lat; 1/1s -> ~0,5% ~125ms.
+// Reference (16 cores): 1/0.1s -> ~2.8% CPU ~135ms lat; 1/1s -> ~0.5% ~125ms.
 
 use common::{decode, encode, Message};
 use futures_util::stream::{SplitSink, SplitStream};
@@ -55,12 +55,12 @@ impl Harness {
             .env("DATABASE_URL", &database_url)
             .env("RUST_LOG", "warn")
             .spawn()
-            .expect("server binary non trovato — `cargo build --release -p server`");
+            .expect("server binary not found — `cargo build --release -p server`");
 
         let deadline = Instant::now() + Duration::from_secs(10);
         while std::net::TcpStream::connect(&addr).is_err() {
             if Instant::now() > deadline {
-                panic!("server non si avvia entro 10s");
+                panic!("server did not start within 10s");
             }
             std::thread::sleep(Duration::from_millis(50));
         }
@@ -104,20 +104,20 @@ impl Client {
         let item = timeout(IO_TIMEOUT, self.reader.next())
             .await
             .expect("timeout recv")
-            .expect("stream chiuso")
+            .expect("stream closed")
             .expect("ws error");
         match item {
             WsMessage::Text(t) => match decode(&t).unwrap() {
                 Message::AuthOk { token } => token,
-                other => panic!("atteso AuthOk, ricevuto {other:?}"),
+                other => panic!("expected AuthOk, got {other:?}"),
             },
-            other => panic!("atteso Text, ricevuto {other:?}"),
+            other => panic!("expected Text, got {other:?}"),
         }
     }
 }
 
-/// Campiona la CPU% del processo `pid` ogni 400 ms in un thread di background,
-/// normalizzata sui core logici (100% = tutti i core). Ritorna (media, picco).
+/// Samples the CPU% of process `pid` every 400 ms in a background thread,
+/// normalized over logical cores (100% = all cores). Returns (average, peak).
 struct CpuSampler {
     stop: Arc<AtomicBool>,
     handle: Option<std::thread::JoinHandle<(f64, f64)>>,
@@ -164,7 +164,7 @@ async fn stress_trickle() {
     let sampler = CpuSampler::start(h.pid());
     let t0 = Instant::now();
     let (mut lat_sum, mut lat_max) = (0.0, 0.0f64);
-    let mut conns = Vec::with_capacity(n); // tiene vive le sessioni fino a fine misura
+    let mut conns = Vec::with_capacity(n); // keeps the sessions alive until the end of the measurement
     for i in 0..n {
         let op = Instant::now();
         let mut c = Client::connect(&h.addr).await;
@@ -179,9 +179,9 @@ async fn stress_trickle() {
     let (cpu_avg, cpu_peak) = sampler.stop();
 
     println!(
-        "[STRESS] trickle  utenti={n}  ritmo={rate:.1}/s  \
-         CPU_media={cpu_avg:.2}%  CPU_picco={cpu_peak:.2}%  \
-         lat_media={:.1} ms  lat_max={:.1} ms",
+        "[STRESS] trickle  users={n}  rate={rate:.1}/s  \
+         CPU_avg={cpu_avg:.2}%  CPU_peak={cpu_peak:.2}%  \
+         lat_avg={:.1} ms  lat_max={:.1} ms",
         lat_sum / n as f64,
         lat_max
     );

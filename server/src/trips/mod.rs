@@ -13,7 +13,7 @@ struct CoordState {
 }
 
 pub struct TripsStore {
-    // Associa trip_id all'ultima coordinata nota
+    // Maps trip_id to the last known coordinate
     last_coordinates: HashMap<i64, CoordState>,
 }
 
@@ -55,8 +55,8 @@ pub async fn initialize_trips(user: String, lat: f64, lon: f64, ts: i64) -> Resu
         );
     }
 
-    // Spec: appena loggato/avviato l'utente è "fermo"; passa a "in movimento"
-    // solo al primo cambio di coordinata.
+    // Spec: right after login/start the user is "stationary"; they switch to
+    // "moving" only at the first coordinate change.
     status::set(&user, UserStatus::Stationary).await;
 
     Ok(trip_id)
@@ -73,34 +73,33 @@ pub async fn terminate_trip(trip_id: i64, user: String, ts: i64) -> Result<(), S
     Ok(())
 }
 
-/// Rimuove un trip dallo store in memoria senza toccare il DB. Usato dalla
-/// procedura di cleanup della connessione quando si chiude un trip orfano
-/// (la riga DB è già stata aggiornata dal chiamante via `db::end_trip`).
+/// Removes a trip from the in-memory store without touching the DB. Used by
+/// the connection cleanup procedure when closing an orphan trip (the DB row
+/// has already been updated by the caller via `db::end_trip`).
 pub async fn drop_trip(trip_id: i64) {
     let mut store = get_trips_store().lock().await;
     store.last_coordinates.remove(&trip_id);
 }
 
-// Numero di campioni `POSITION` consecutivi con coordinate identiche oltre
-// il quale l'utente viene marcato "fermo". Con cadenza di 30 s lato client
-// (spec), 6 campioni = 180 s = 3 min, come richiesto dalla specifica.
+// Number of consecutive `POSITION` samples with identical coordinates beyond
+// which the user is marked "stationary". With a client-side cadence of 30 s
+// (spec), 6 samples = 180 s = 3 min, as required by the specification.
 const STOP_THRESHOLD_SAMPLES: u32 = 6;
 
-/// `true` se il trip è presente nello store in memoria.
-/// Usato dal dispatcher per distinguere un trip "vivo" da un trip rimasto
-/// aperto in DB dopo un crash/restart del server (in tal caso lo stato
-/// di movimento è perso e non è recuperabile: meglio chiuderlo).
+/// `true` if the trip is present in the in-memory store.
+/// Used by the dispatcher to tell a "live" trip apart from a trip left open
+/// in the DB after a server crash/restart (in that case the movement state
+/// is lost and unrecoverable: better to close it).
 pub async fn is_tracked(trip_id: i64) -> bool {
     let store = get_trips_store().lock().await;
     store.last_coordinates.contains_key(&trip_id)
 }
 
-/// Decide se due coordinate possono essere considerate "uguali" ai fini
-/// del rilevamento della pausa. Usa la distanza haversine sotto la stessa
-/// soglia adottata da `compute_movement_stats`, così il flag `stopped`
-/// scritto in DB e il calcolo delle pause restano coerenti: niente
-/// confronti `==` su `f64`, che sarebbero fragili (rumore numerico,
-/// arrotondamenti del client).
+/// Decides whether two coordinates can be considered "equal" for pause
+/// detection purposes. Uses the haversine distance under the same threshold
+/// adopted by `compute_movement_stats`, so the `stopped` flag written to
+/// the DB and the pause computation stay consistent: no `==` comparisons
+/// on `f64`, which would be fragile (numeric noise, client rounding).
 fn coords_equal(a_lat: f64, a_lon: f64, b_lat: f64, b_lon: f64) -> bool {
     db::haversine_m(a_lat, a_lon, b_lat, b_lon) <= db::MOVEMENT_EPS_METERS
 }

@@ -1,49 +1,50 @@
-//! Simulatore di movimento veicolo su grafo stradale, compilato a WebAssembly.
+//! Vehicle movement simulator on a road graph, compiled to WebAssembly.
 //!
-//! Gira nel browser (zero carico sul server: il server riceve solo i
-//! `POSITION` ogni 30 s). Il veicolo cammina sugli archi di un grafo stradale
-//! di Torino (esportato da OpenStreetMap, vedi `tools/export_turin_graph.py`):
-//! segue la forma reale delle strade, sceglie una direzione agli incroci, va a
-//! velocità urbane (30–70 km/h) e fa pause occasionali (semafori/sosta).
+//! Runs in the browser (zero load on the server: the server only receives
+//! `POSITION` every 30 s). The vehicle walks along the edges of a Turin road
+//! graph (exported from OpenStreetMap, see `tools/export_turin_graph.py`):
+//! it follows the real shape of the streets, picks a direction at
+//! intersections, drives at urban speeds (30–70 km/h) and takes occasional
+//! pauses (traffic lights/stops).
 //!
-//! `advance(dt_secs)` fa progredire la simulazione di `dt_secs` *logici*. Il
-//! chiamante lo invoca spesso con dt piccolo (es. 0.1 s) per un movimento
-//! fluido, e campiona/invia la posizione al server ogni 30 s, come da spec.
-//! Disaccoppiare animazione (fluida) e invio (ogni 30 s) evita i "salti".
+//! `advance(dt_secs)` advances the simulation by `dt_secs` *logical* seconds.
+//! The caller invokes it often with a small dt (e.g. 0.1 s) for smooth
+//! movement, and samples/sends the position to the server every 30 s, as per
+//! spec. Decoupling animation (smooth) from sending (every 30 s) avoids "jumps".
 
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 
-// --- Costanti fisiche -------------------------------------------------------
+// --- Physical constants ------------------------------------------------------
 
-/// Range di velocità urbana, km/h.
+/// Urban speed range, km/h.
 const SPEED_MIN_KMH: f64 = 30.0;
 const SPEED_MAX_KMH: f64 = 70.0;
 
-/// Tempo di guida (secondi logici) tra una pausa e l'altra.
+/// Driving time (logical seconds) between one pause and the next.
 const DRIVE_MIN_SECS: f64 = 90.0;
 const DRIVE_MAX_SECS: f64 = 600.0;
 
-/// Durata di una pausa (secondi logici). Alcune superano i 180 s ⇒ il server
-/// le riconosce come stato "fermo"; le più brevi (semafori) restano "in
-/// movimento". Coerente con la spec.
+/// Duration of a pause (logical seconds). Some exceed 180 s ⇒ the server
+/// recognizes them as the "stationary" state; the shorter ones (traffic
+/// lights) remain "moving". Consistent with the spec.
 const PAUSE_MIN_SECS: f64 = 10.0;
 const PAUSE_MAX_SECS: f64 = 240.0;
 
-/// Tetto di iterazioni per `advance`: difesa contro cicli di archi a
-/// lunghezza ~0 nel grafo (coordinate duplicate).
+/// Iteration cap for `advance`: defense against cycles of ~0-length edges
+/// in the graph (duplicated coordinates).
 const MAX_STEPS: u32 = 10_000;
 
-/// Raggio terrestre medio in metri (per haversine).
+/// Mean Earth radius in meters (for haversine).
 const EARTH_R_M: f64 = 6_371_000.0;
 
-// --- Grafo ------------------------------------------------------------------
+// --- Graph ------------------------------------------------------------------
 
 #[derive(Deserialize)]
 struct Graph {
     /// `nodes[i] = [lat, lon]`.
     nodes: Vec<[f64; 2]>,
-    /// `adj[i]` = indici dei nodi adiacenti a `i` (grafo non orientato).
+    /// `adj[i]` = indices of the nodes adjacent to `i` (undirected graph).
     adj: Vec<Vec<u32>>,
 }
 
@@ -59,14 +60,14 @@ impl Graph {
         haversine_m(alat, alon, blat, blon)
     }
 
-    /// Un nodo è un incrocio se non ha esattamente 2 vicini: i nodi di grado 2
-    /// sono semplici punti di forma lungo una strada (nessuna vera scelta).
+    /// A node is an intersection if it doesn't have exactly 2 neighbors:
+    /// degree-2 nodes are simple shape points along a road (no real choice).
     fn is_intersection(&self, i: usize) -> bool {
         self.adj[i].len() != 2
     }
 }
 
-/// Distanza in metri tra due coordinate (formula dell'emisenoverso).
+/// Distance in meters between two coordinates (haversine formula).
 fn haversine_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     let (p1, p2) = (lat1.to_radians(), lat2.to_radians());
     let dphi = (lat2 - lat1).to_radians();
@@ -77,8 +78,8 @@ fn haversine_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
 
 // --- PRNG -------------------------------------------------------------------
 
-/// xorshift64*: PRNG minimale e deterministico dato il seme. Niente dipendenze
-/// esterne (evita `getrandom` e la sua configurazione per il target wasm).
+/// xorshift64*: minimal PRNG, deterministic given the seed. No external
+/// dependencies (avoids `getrandom` and its configuration for the wasm target).
 struct Rng(u64);
 
 impl Rng {
@@ -95,7 +96,7 @@ impl Rng {
         x.wrapping_mul(0x2545_F491_4F6C_DD1D)
     }
 
-    /// f64 uniforme in [0, 1).
+    /// Uniform f64 in [0, 1).
     fn unit(&mut self) -> f64 {
         (self.next_u64() >> 11) as f64 / (1u64 << 53) as f64
     }
@@ -104,31 +105,31 @@ impl Rng {
         lo + (hi - lo) * self.unit()
     }
 
-    /// Indice uniforme in [0, n).
+    /// Uniform index in [0, n).
     fn below(&mut self, n: usize) -> usize {
         (self.next_u64() % n as u64) as usize
     }
 }
 
-// --- Simulatore -------------------------------------------------------------
+// --- Simulator -------------------------------------------------------------
 
 #[wasm_bindgen]
 pub struct Simulator {
     graph: Graph,
     rng: Rng,
-    /// Nodo da cui si proviene nel segmento corrente.
+    /// Node we come from in the current segment.
     from: usize,
-    /// Nodo verso cui si sta andando.
+    /// Node we are heading towards.
     to: usize,
-    /// Distanza già percorsa lungo il segmento `from → to`, in metri.
+    /// Distance already traveled along the `from → to` segment, in meters.
     offset_m: f64,
-    /// Velocità corrente in m/s (ricampionata agli incroci).
+    /// Current speed in m/s (resampled at intersections).
     speed_mps: f64,
-    /// Secondi di guida rimanenti prima della prossima pausa.
+    /// Driving seconds left before the next pause.
     drive_secs_left: f64,
-    /// Secondi di pausa rimanenti; > 0 ⇒ fermo (coordinata invariata).
+    /// Pause seconds left; > 0 ⇒ stationary (coordinate unchanged).
     pause_secs_left: f64,
-    /// Velocità mostrata in UI (0 durante le pause).
+    /// Speed shown in the UI (0 during pauses).
     last_speed_kmh: f64,
     lat: f64,
     lon: f64,
@@ -136,27 +137,28 @@ pub struct Simulator {
 
 #[wasm_bindgen]
 impl Simulator {
-    /// Crea il simulatore dal JSON del grafo (`{nodes, adj}`) e da un seme
-    /// (es. `Date.now()` lato JS). Posizione iniziale: nodo casuale con almeno
-    /// un vicino. Ritorna errore se il JSON è invalido o il grafo è vuoto.
+    /// Creates the simulator from the graph JSON (`{nodes, adj}`) and a seed
+    /// (e.g. `Date.now()` on the JS side). Initial position: random node with
+    /// at least one neighbor. Returns an error if the JSON is invalid or the
+    /// graph is empty.
     #[wasm_bindgen(constructor)]
     pub fn new(graph_json: &str, seed: f64) -> Result<Simulator, JsValue> {
-        // `JsValue` non è utilizzabile fuori da wasm (panica): tieni la logica
-        // in `build` con errore `String`, testabile nativamente, e qui mappa
-        // solo l'errore al tipo JS.
+        // `JsValue` is unusable outside wasm (it panics): keep the logic in
+        // `build` with a `String` error, testable natively, and here only
+        // map the error to the JS type.
         Self::build(graph_json, seed).map_err(|e| JsValue::from_str(&e))
     }
 
     fn build(graph_json: &str, seed: f64) -> Result<Simulator, String> {
         let graph: Graph = serde_json::from_str(graph_json)
-            .map_err(|e| format!("grafo JSON non valido: {e}"))?;
+            .map_err(|e| format!("invalid graph JSON: {e}"))?;
         if graph.nodes.is_empty() {
-            return Err("grafo vuoto".to_string());
+            return Err("empty graph".to_string());
         }
 
         let mut rng = Rng::new(seed as u64);
 
-        // Cerca un nodo di partenza con almeno un arco uscente.
+        // Look for a starting node with at least one outgoing edge.
         let n = graph.nodes.len();
         let mut from = rng.below(n);
         for _ in 0..n {
@@ -166,7 +168,7 @@ impl Simulator {
             from = (from + 1) % n;
         }
         if graph.adj[from].is_empty() {
-            return Err("grafo senza archi".to_string());
+            return Err("graph without edges".to_string());
         }
 
         let to = graph.adj[from][rng.below(graph.adj[from].len())] as usize;
@@ -193,14 +195,14 @@ impl Simulator {
         self.speed_mps = self.rng.range(SPEED_MIN_KMH, SPEED_MAX_KMH) / 3.6;
     }
 
-    /// Sceglie il prossimo nodo da `node`, evitando di tornare su `avoid`
-    /// (il nodo da cui si è appena arrivati) se esistono alternative.
-    /// Su un vicolo cieco torna indietro (U-turn).
+    /// Picks the next node from `node`, avoiding going back to `avoid`
+    /// (the node we just came from) if alternatives exist.
+    /// On a dead end it turns around (U-turn).
     fn pick_next(&mut self, node: usize, avoid: usize) -> usize {
         let neigh = &self.graph.adj[node];
         let alt = neigh.iter().filter(|&&x| x as usize != avoid).count();
         if alt == 0 {
-            return avoid; // vicolo cieco
+            return avoid; // dead end
         }
         let mut k = self.rng.below(alt);
         for &x in neigh {
@@ -212,31 +214,31 @@ impl Simulator {
             }
             k -= 1;
         }
-        avoid // irraggiungibile
+        avoid // unreachable
     }
 
-    /// Fa progredire la simulazione di `dt_secs` secondi logici. Chiamato spesso
-    /// con dt piccolo (animazione fluida); la posizione va campionata/inviata
-    /// dal chiamante ogni 30 s.
+    /// Advances the simulation by `dt_secs` logical seconds. Called often
+    /// with a small dt (smooth animation); the position should be
+    /// sampled/sent by the caller every 30 s.
     pub fn advance(&mut self, dt_secs: f64) {
         if dt_secs <= 0.0 {
             return;
         }
 
-        // In pausa: fermo, coordinata invariata.
+        // Paused: stationary, coordinate unchanged.
         if self.pause_secs_left > 0.0 {
             self.pause_secs_left -= dt_secs;
             if self.pause_secs_left > 0.0 {
                 self.last_speed_kmh = 0.0;
                 return;
             }
-            // Pausa finita: riparti con una nuova velocità.
+            // Pause over: restart with a new speed.
             self.pause_secs_left = 0.0;
             self.resample_speed();
         }
 
-        // Scadenza del tempo di guida → inizia una pausa nel punto corrente
-        // (anche a metà strada: sosta nel traffico).
+        // Driving time expired → start a pause at the current point
+        // (even mid-road: a stop in traffic).
         self.drive_secs_left -= dt_secs;
         if self.drive_secs_left <= 0.0 {
             self.pause_secs_left = self.rng.range(PAUSE_MIN_SECS, PAUSE_MAX_SECS);
@@ -263,7 +265,7 @@ impl Simulator {
                 break;
             }
 
-            // Raggiunto il nodo `to`: prosegui su un nuovo arco.
+            // Reached node `to`: continue onto a new edge.
             budget_m -= remain.max(0.0);
             let arrived = self.to;
             let came_from = self.from;
@@ -271,7 +273,7 @@ impl Simulator {
             self.from = arrived;
             self.to = next;
             self.offset_m = 0.0;
-            // A un vero incrocio, cambia velocità (strada nuova).
+            // At a real intersection, change speed (new road).
             if self.graph.is_intersection(arrived) {
                 self.resample_speed();
             }
@@ -280,7 +282,7 @@ impl Simulator {
         self.update_position();
     }
 
-    /// Aggiorna `lat`/`lon` interpolando lungo il segmento `from → to`.
+    /// Updates `lat`/`lon` by interpolating along the `from → to` segment.
     fn update_position(&mut self) {
         let (flat, flon) = self.graph.coord(self.from);
         let (tlat, tlon) = self.graph.coord(self.to);
@@ -304,13 +306,13 @@ impl Simulator {
         self.lon
     }
 
-    /// `true` se il veicolo è in movimento (non in pausa).
+    /// `true` if the vehicle is moving (not paused).
     #[wasm_bindgen(getter)]
     pub fn moving(&self) -> bool {
         self.pause_secs_left <= 0.0
     }
 
-    /// Velocità corrente in km/h (0 in pausa).
+    /// Current speed in km/h (0 while paused).
     #[wasm_bindgen(getter)]
     pub fn speed_kmh(&self) -> f64 {
         self.last_speed_kmh
@@ -321,7 +323,7 @@ impl Simulator {
 mod tests {
     use super::*;
 
-    // Grafo lineare 0-1-2-3-4 con coordinate distanziate ~127 m in longitudine.
+    // Linear graph 0-1-2-3-4 with coordinates spaced ~127 m apart in longitude.
     fn line_graph_json() -> String {
         let nodes: Vec<String> = (0..5)
             .map(|i| format!("[45.07,{:.6}]", 7.68 + i as f64 * 0.00127))
@@ -336,13 +338,13 @@ mod tests {
 
     #[test]
     fn parses_and_starts_on_a_node() {
-        let s = Simulator::build(&line_graph_json(), 1.0).expect("costruzione");
+        let s = Simulator::build(&line_graph_json(), 1.0).expect("construction");
         assert!((s.lat() - 45.07).abs() < 1e-6);
     }
 
     #[test]
     fn rejects_bad_json() {
-        assert!(Simulator::build("non-json", 1.0).is_err());
+        assert!(Simulator::build("not-json", 1.0).is_err());
     }
 
     #[test]
@@ -359,8 +361,8 @@ mod tests {
 
     #[test]
     fn stays_on_the_road_line() {
-        // Su un grafo lineare la latitudine resta costante e la longitudine
-        // dentro l'estensione del grafo: il veicolo non "vola" fuori strada.
+        // On a linear graph the latitude stays constant and the longitude
+        // stays within the graph's extent: the vehicle doesn't "fly" off road.
         let mut s = Simulator::build(&line_graph_json(), 7.0).unwrap();
         for _ in 0..1000 {
             s.advance(0.3);
@@ -372,16 +374,16 @@ mod tests {
 
     #[test]
     fn small_steps_move_smoothly() {
-        // Passi piccoli ⇒ spostamenti piccoli (no "salti"): a ~50 km/h in 0.1 s
-        // ci si sposta ~1.4 m, ben sotto la lunghezza di un segmento.
+        // Small steps ⇒ small displacements (no "jumps"): at ~50 km/h in 0.1 s
+        // you move ~1.4 m, well below the length of a segment.
         let mut s = Simulator::build(&line_graph_json(), 3.0).unwrap();
-        // Salta eventuali pause iniziali: assicura stato di guida.
+        // Skip any initial pauses: ensure a driving state.
         s.pause_secs_left = 0.0;
         s.drive_secs_left = 1000.0;
         let (lat0, lon0) = (s.lat(), s.lon());
         s.advance(0.1);
         let moved = haversine_m(lat0, lon0, s.lat(), s.lon());
-        assert!(moved < 5.0, "spostamento per step troppo grande: {moved} m");
+        assert!(moved < 5.0, "per-step displacement too large: {moved} m");
     }
 
     #[test]

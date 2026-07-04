@@ -3,9 +3,9 @@ use std::sync::OnceLock;
 
 use tokio::sync::Mutex;
 
-/// Stato logico dell'utente connesso (spec: "fermo", "in movimento").
-/// Lo stato "sconnesso" è rappresentato dall'assenza dell'utente dalla
-/// mappa (vedi `remove`).
+/// Logical state of the connected user (spec: "stationary", "moving").
+/// The "disconnected" state is represented by the user's absence from the
+/// map (see `remove`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UserStatus {
     Stationary,
@@ -27,9 +27,9 @@ fn store() -> &'static Mutex<HashMap<String, UserStatus>> {
     STATUSES.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// Imposta lo stato di un utente.
-/// Logga solo le transizioni effettive per evitare rumore (molti POSITION
-/// consecutivi con coord nuova restano `Moving`).
+/// Sets a user's status.
+/// Logs only actual transitions to avoid noise (many consecutive POSITIONs
+/// with a new coordinate remain `Moving`).
 pub async fn set(user: &str, new_status: UserStatus) {
     let mut s = store().lock().await;
     let prev_status = s.get(user).copied();
@@ -39,7 +39,7 @@ pub async fn set(user: &str, new_status: UserStatus) {
     }
 }
 
-/// Rimuove l'utente dalla mappa (equivalente a `Disconnected`).
+/// Removes the user from the map (equivalent to `Disconnected`).
 pub async fn remove(user: &str) {
     let mut s = store().lock().await;
     if s.remove(user).is_some() {

@@ -15,47 +15,47 @@ use tokio::sync::Mutex;
 const BCRYPT_COST: u32 = 10;
 
 // ---------------------------------------------------------------------------
-// Pool SQLite globale.
+// Global SQLite pool.
 //
-// A cosa serve il pool:
-// - Aprire una connessione SQLite costa (open del file, setup PRAGMA): il pool
-//   apre N connessioni all'avvio e le riusa, evitando il costo per ogni query.
-// - Limita la concorrenza (qui max 8 connessioni, vedi `init()`): impedisce di
-//   saturare il DB e mitiga i lock su file tipici di SQLite.
-// - Permette query async parallele: ogni task prende una connessione libera
-//   dal pool e la rilascia al termine.
+// What the pool is for:
+// - Opening a SQLite connection is costly (file open, PRAGMA setup): the pool
+//   opens N connections at startup and reuses them, avoiding the per-query cost.
+// - It caps concurrency (here max 8 connections, see `init()`): it prevents
+//   saturating the DB and mitigates the file locks typical of SQLite.
+// - It allows parallel async queries: each task takes a free connection
+//   from the pool and releases it when done.
 //
-// Perché statico (`OnceLock`):
-// - Singola istanza per processo, condivisa da tutti i moduli senza dover
-//   passare `&SqlitePool` come parametro lungo tutto lo stack di chiamate.
-// - `OnceLock` garantisce init lazy e thread-safe: il pool viene settato una
-//   sola volta dentro `init()` e poi è in sola lettura.
+// Why static (`OnceLock`):
+// - Single instance per process, shared by all modules without having to
+//   pass `&SqlitePool` as a parameter down the whole call stack.
+// - `OnceLock` guarantees lazy, thread-safe init: the pool is set exactly
+//   once inside `init()` and is read-only afterwards.
 // ---------------------------------------------------------------------------
 static POOL: OnceLock<SqlitePool> = OnceLock::new();
 
-// Restituisce l'URL del database: usa la variabile d'ambiente `DATABASE_URL`
-// se presente, altrimenti ricade su un file SQLite locale nella working dir.
+// Returns the database URL: uses the `DATABASE_URL` environment variable
+// if present, otherwise falls back to a local SQLite file in the working dir.
 fn database_url() -> String {
     std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://./georuggine.db".to_string())
 }
 
-// Accesso globale al pool già inizializzato. Panica se `init()` non è ancora
-// stato chiamato: il pool deve esistere prima di qualsiasi query.
+// Global access to the already-initialized pool. Panics if `init()` has not
+// been called yet: the pool must exist before any query.
 pub fn pool() -> &'static SqlitePool {
     POOL.get()
-        .expect("DB non inizializzato: chiama db::init() prima")
+        .expect("DB not initialized: call db::init() first")
 }
 
-/// Apre il pool, abilita foreign_keys e applica le migrations.
+/// Opens the pool, enables foreign_keys and applies the migrations.
 pub async fn init() -> Result<()> {
     let url = database_url();
-    // WAL + synchronous=Normal: scritture concorrenti non bloccano i lettori e
-    // si paga solo una fsync per commit invece che due. Trade-off accettabile:
-    // in caso di crash del SO al massimo si perdono le ultime transazioni non
-    // ancora checkpointate, ma niente corruzione.
-    // `:memory:` non supporta WAL, quindi resto sul default in quel caso.
+    // WAL + synchronous=Normal: concurrent writes don't block readers and
+    // only one fsync per commit is paid instead of two. Acceptable trade-off:
+    // if the OS crashes, at most the last transactions not yet checkpointed
+    // are lost, but no corruption.
+    // `:memory:` doesn't support WAL, so stick to the default in that case.
     let mut opts = SqliteConnectOptions::from_str(&url)
-        .context("DATABASE_URL non valido")?
+        .context("invalid DATABASE_URL")?
         .create_if_missing(true)
         .foreign_keys(true);
     if url != "sqlite::memory:" {
@@ -69,7 +69,7 @@ pub async fn init() -> Result<()> {
         .max_connections(max_connections)
         .connect_with(opts)
         .await
-        .context("apertura pool sqlite")?;
+        .context("opening sqlite pool")?;
 
     sqlx::migrate!("./migrations")
         .run(&pool)
@@ -77,11 +77,11 @@ pub async fn init() -> Result<()> {
         .context("migrations")?;
 
     POOL.set(pool)
-        .map_err(|_| anyhow!("pool gia' inizializzato"))?;
+        .map_err(|_| anyhow!("pool already initialized"))?;
     Ok(())
 }
 
-/// Compat: il server chiama `ensure_file_exists` al boot.
+/// Compat: the server calls `ensure_file_exists` at boot.
 pub async fn ensure_file_exists() -> Result<()> {
     if POOL.get().is_none() {
         init().await?;
@@ -97,7 +97,7 @@ fn now_secs() -> i64 {
 }
 
 // ---------------------------------------------------------------------------
-// Sessioni in memoria (token <-> username).
+// In-memory sessions (token <-> username).
 // ---------------------------------------------------------------------------
 
 pub struct AuthStore {
@@ -139,13 +139,13 @@ pub async fn insert_token(username: &str, token: &str) {
         .insert(token.to_string(), username.to_string());
 }
 
-/// Inserisce token solo se `username` non ha già una sessione attiva.
-/// Check + insert atomici sotto lo stesso lock: due login concorrenti
-/// per lo stesso utente non possono entrambi superare la verifica.
+/// Inserts the token only if `username` doesn't already have an active session.
+/// Check + insert are atomic under the same lock: two concurrent logins
+/// for the same user cannot both pass the check.
 pub async fn try_insert_token(username: &str, token: &str) -> Result<()> {
     let mut store = get_auth_store().lock().await;
     if store.sessions.values().any(|u| u == username) {
-        return Err(anyhow!("utente già loggato da altra sessione"));
+        return Err(anyhow!("user already logged in from another session"));
     }
     store
         .sessions
@@ -163,10 +163,10 @@ pub async fn invalidate_token(token: &str) {
     store.sessions.remove(token);
 }
 
-/// Invalida tutte le sessioni attive per `username`. Usata quando una
-/// nuova LOGIN sovrascrive una sessione precedente (single-session policy):
-/// elimina il token in modo che, se il vecchio client tornasse a parlare,
-/// qualunque richiesta autenticata venga rifiutata con `UNAUTHORIZED`.
+/// Invalidates all active sessions for `username`. Used when a new LOGIN
+/// overwrites a previous session (single-session policy): it removes the
+/// token so that, if the old client came back to talk, any authenticated
+/// request would be rejected with `UNAUTHORIZED`.
 pub async fn invalidate_user_sessions(username: &str) -> usize {
     let mut store = get_auth_store().lock().await;
     let tokens: Vec<String> = store
@@ -181,7 +181,7 @@ pub async fn invalidate_user_sessions(username: &str) -> usize {
     n
 }
 
-/// Vero se l'utente compare in una sessione attiva (qualunque conn).
+/// True if the user appears in an active session (any connection).
 pub async fn is_logged_in(username: &str) -> bool {
     let store = get_auth_store().lock().await;
     store.sessions.values().any(|u| u == username)
@@ -192,7 +192,7 @@ pub async fn clear_sessions() {
     store.sessions.clear();
 }
 
-/// Wipe completo: utile nei test per partire da uno stato pulito.
+/// Full wipe: useful in tests to start from a clean state.
 pub async fn reset_all_for_tests() -> Result<()> {
     sqlx::query("DELETE FROM positions").execute(pool()).await?;
     sqlx::query("DELETE FROM trips").execute(pool()).await?;
@@ -202,7 +202,7 @@ pub async fn reset_all_for_tests() -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// Utenti.
+// Users.
 // ---------------------------------------------------------------------------
 
 pub async fn key_exists(username: &str) -> Result<bool> {
@@ -217,7 +217,7 @@ pub async fn check_credentials(msg: &Message) -> Result<()> {
     let (username, password) = match msg {
         Message::Login { username, password } => (username.clone(), password.clone()),
         Message::Register { username, password } => (username.clone(), password.clone()),
-        _ => return Err(anyhow!("messaggio non valido")),
+        _ => return Err(anyhow!("invalid message")),
     };
 
     let row = sqlx::query("SELECT password_hash FROM users WHERE username = ?")
@@ -225,7 +225,7 @@ pub async fn check_credentials(msg: &Message) -> Result<()> {
         .fetch_optional(pool())
         .await?;
     let Some(row) = row else {
-        return Err(anyhow!("utente non trovato"));
+        return Err(anyhow!("user not found"));
     };
     let stored: String = row.try_get("password_hash")?;
 
@@ -235,14 +235,14 @@ pub async fn check_credentials(msg: &Message) -> Result<()> {
     if ok {
         Ok(())
     } else {
-        Err(anyhow!("credenziali non valide"))
+        Err(anyhow!("invalid credentials"))
     }
 }
 
 pub async fn save_register(msg: &Message) -> Result<()> {
     let (username, password) = match msg {
         Message::Register { username, password } => (username.clone(), password.clone()),
-        _ => return Err(anyhow!("save_register: non è una variante Register")),
+        _ => return Err(anyhow!("save_register: not a Register variant")),
     };
 
     let password_hash = tokio::task::spawn_blocking(move || hash(password, BCRYPT_COST))
@@ -259,18 +259,18 @@ pub async fn save_register(msg: &Message) -> Result<()> {
 
     match res {
         Ok(_) => {
-            tracing::info!("utente '{username}' registrato");
+            tracing::info!("user '{username}' registered");
             Ok(())
         }
         Err(sqlx::Error::Database(e)) if e.is_unique_violation() => {
-            Err(anyhow!("utente esiste già"))
+            Err(anyhow!("user already exists"))
         }
         Err(e) => Err(e.into()),
     }
 }
 
 // ---------------------------------------------------------------------------
-// Trip.
+// Trips.
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -281,7 +281,7 @@ pub struct TripRecord {
     pub ended_at: Option<i64>,
 }
 
-/// Apre un nuovo viaggio per l'utente. Ritorna `trip_id`.
+/// Opens a new trip for the user. Returns `trip_id`.
 pub async fn start_trip(username: &str, lat: f64, lon: f64, ts: i64) -> Result<i64> {
     let row = sqlx::query(
         "INSERT INTO trips (username, started_at, ended_at) VALUES (?, ?, NULL) RETURNING id",
@@ -313,7 +313,7 @@ pub async fn insert_position(
     Ok(())
 }
 
-/// Chiude un viaggio: valida ownership + che non sia gia' chiuso.
+/// Closes a trip: validates ownership + that it is not already closed.
 pub async fn end_trip(trip_id: i64, username: &str, ts: i64) -> Result<()> {
     let res = sqlx::query(
         "UPDATE trips SET ended_at = ? \
@@ -325,12 +325,12 @@ pub async fn end_trip(trip_id: i64, username: &str, ts: i64) -> Result<()> {
     .execute(pool())
     .await?;
     if res.rows_affected() == 0 {
-        return Err(anyhow!("viaggio inesistente, non tuo o già chiuso"));
+        return Err(anyhow!("trip missing, not yours or already closed"));
     }
     Ok(())
 }
 
-/// Restituisce username del trip se aperto e di proprieta' dell'utente.
+/// Returns whether the trip is open and owned by the user.
 pub async fn trip_open_for(trip_id: i64, username: &str) -> Result<bool> {
     let row = sqlx::query("SELECT 1 FROM trips WHERE id = ? AND username = ? AND ended_at IS NULL")
         .bind(trip_id)
@@ -340,9 +340,9 @@ pub async fn trip_open_for(trip_id: i64, username: &str) -> Result<bool> {
     Ok(row.is_some())
 }
 
-/// ID di tutti i trip ancora aperti per un utente. Usato in fase di cleanup
-/// della connessione WebSocket per chiudere viaggi rimasti pendenti quando
-/// il client si disconnette senza inviare `EndTrip`.
+/// IDs of all trips still open for a user. Used during WebSocket connection
+/// cleanup to close trips left pending when the client disconnects without
+/// sending `EndTrip`.
 pub async fn open_trip_ids_for(username: &str) -> Result<Vec<i64>> {
     let rows = sqlx::query("SELECT id FROM trips WHERE username = ? AND ended_at IS NULL")
         .bind(username)
@@ -354,22 +354,22 @@ pub async fn open_trip_ids_for(username: &str) -> Result<Vec<i64>> {
 }
 
 // ---------------------------------------------------------------------------
-// Posizioni e statistiche.
+// Positions and statistics.
 // ---------------------------------------------------------------------------
 
-// Tolleranza in metri per evitare che oscillazioni minime del GPS vengano
-// considerate movimento reale. Esposta pubblicamente perché anche il modulo
-// `trips` lato server la usa per decidere se due punti sono "uguali",
-// così la stessa soglia governa sia il flag `stopped` che il calcolo
-// statistico delle pause.
+// Tolerance in meters to prevent minimal GPS oscillations from being
+// counted as real movement. Exposed publicly because the server-side
+// `trips` module also uses it to decide whether two points are "equal",
+// so the same threshold governs both the `stopped` flag and the
+// statistical computation of pauses.
 pub const MOVEMENT_EPS_METERS: f64 = 5.0;
 
-/// Massimo gap accettato tra due campioni consecutivi nello stesso trip
-/// quando si calcolano le statistiche. Spec: cadenza nominale 30 s, quindi
-/// 90 s = 3× tolleranza copre piccoli ritardi/jitter. Oltre questa soglia
-/// il segmento non è affidabile (es. client offline, app crashata, server
-/// riavviato) e va escluso dai conteggi: altrimenti un buco di ore
-/// finirebbe contato come "pausa" o "movimento" gonfiando le statistiche.
+/// Maximum accepted gap between two consecutive samples in the same trip
+/// when computing statistics. Spec: nominal cadence 30 s, so
+/// 90 s = 3× tolerance covers small delays/jitter. Beyond this threshold
+/// the segment is unreliable (e.g. client offline, app crashed, server
+/// restarted) and must be excluded from the counts: otherwise a gap of
+/// hours would be counted as "pause" or "movement", inflating the statistics.
 const MAX_SAMPLE_GAP_SECS: i64 = 90;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -401,7 +401,7 @@ pub async fn trajectory_for_user(
     to_ts: i64,
 ) -> Result<Vec<PositionRecord>> {
     if from_ts > to_ts {
-        return Err(anyhow!("intervallo temporale non valido"));
+        return Err(anyhow!("invalid time interval"));
     }
 
     let rows = sqlx::query(
@@ -456,7 +456,7 @@ pub fn compute_movement_stats(
         let a = &window[0];
         let b = &window[1];
 
-        // Non collegare artificialmente due viaggi diversi.
+        // Don't artificially connect two different trips.
         if a.trip_id != b.trip_id {
             continue;
         }
@@ -469,9 +469,9 @@ pub fn compute_movement_stats(
         total_secs += dt;
         let d = haversine_m(a.lat, a.lon, b.lat, b.lon);
 
-        // Il modello aggiornato ha già il booleano `stopped`: lo usiamo come
-        // segnale principale. La distanza sotto soglia resta una protezione
-        // utile contro rumore GPS o dati vecchi senza flag coerente.
+        // The updated model already carries the `stopped` boolean: use it as
+        // the primary signal. Distance below the threshold remains a useful
+        // protection against GPS noise or old data without a coherent flag.
         let is_pause = b.stopped || d <= MOVEMENT_EPS_METERS;
 
         if is_pause {
@@ -518,7 +518,7 @@ pub fn haversine_m(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
 }
 
 // ---------------------------------------------------------------------------
-// Test.
+// Tests.
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
@@ -547,7 +547,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn register_e_check_credentials_ok() {
+    async fn register_and_check_credentials_ok() {
         let _g = TEST_GUARD.lock().unwrap_or_else(|p| p.into_inner());
         setup().await;
         let reg = Message::Register {
@@ -569,7 +569,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn save_register_duplicato_fallisce() {
+    async fn duplicate_save_register_fails() {
         let _g = TEST_GUARD.lock().unwrap_or_else(|p| p.into_inner());
         setup().await;
         let reg = Message::Register {
@@ -593,7 +593,7 @@ mod tests {
 
         let trip_id = start_trip("mario", 45.07, 12.29, 0).await.unwrap();
         assert!(trip_open_for(trip_id, "mario").await.unwrap());
-        assert!(!trip_open_for(trip_id, "altro").await.unwrap());
+        assert!(!trip_open_for(trip_id, "other").await.unwrap());
 
         end_trip(trip_id, "mario", 1).await.unwrap();
         assert!(!trip_open_for(trip_id, "mario").await.unwrap());
@@ -601,7 +601,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn end_trip_di_altro_utente_fallisce() {
+    async fn end_trip_of_another_user_fails() {
         let _g = TEST_GUARD.lock().unwrap_or_else(|p| p.into_inner());
         setup().await;
         for u in ["mario", "luigi"] {
@@ -617,7 +617,7 @@ mod tests {
     }
 
     #[test]
-    fn statistiche_usano_stopped_e_distanza() {
+    fn statistics_use_stopped_and_distance() {
         let points = vec![
             PositionRecord {
                 trip_id: 1,

@@ -1,14 +1,14 @@
-// Client WebSocket interattivo. Comandi disponibili:
+// Interactive WebSocket client. Available commands:
 //   /register <user> <pass>
 //   /login    <user> <pass>
-//   /start [lat lon]                 apre nuovo viaggio con timestamp corrente
-//   /pos <lat> <lon> [ts]            invia una posizione per il viaggio corrente
-//   /stats day|week|month            statistiche su intervalli correnti UTC
-//   /stats-range <from_ts> <to_ts>   statistiche su intervallo manuale
-//   /end                             chiude viaggio corrente
-//   /chat     <testo>                invia un messaggio di chat al server
-//                                    (il server logga e risponde ACK; non
-//                                    c'è inoltro ad altri client)
+//   /start [lat lon]                 opens a new trip with the current timestamp
+//   /pos <lat> <lon> [ts]            sends a position for the current trip
+//   /stats day|week|month            statistics over current UTC intervals
+//   /stats-range <from_ts> <to_ts>   statistics over a manual interval
+//   /end                             closes the current trip
+//   /chat     <text>                 sends a chat message to the server
+//                                    (the server logs it and replies ACK; there
+//                                    is no forwarding to other clients)
 //   /quit
 use anyhow::Result;
 use common::{decode, encode, Message};
@@ -22,10 +22,10 @@ use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
-// URL WebSocket di default a cui il client si connette se la variabile
-// d'ambiente `SERVER_ADDR` non è impostata. Schema `ws://` = WebSocket in
-// chiaro (per TLS servirebbe `wss://`). Host:porta + path `/ws` devono
-// combaciare con la route esposta dal server (vedi server/src/main.rs).
+// Default WebSocket URL the client connects to when the `SERVER_ADDR`
+// environment variable is not set. `ws://` scheme = cleartext WebSocket
+// (TLS would require `wss://`). Host:port + `/ws` path must match the
+// route exposed by the server (see server/src/main.rs).
 const ADDR_DEFAULT: &str = "ws://127.0.0.1:7878/ws";
 const SECS_PER_DAY: i64 = 86_400;
 
@@ -41,8 +41,8 @@ type SharedPosition = Arc<Mutex<(f64, f64)>>;
 
 const AUTOPOS_SECS: u64 = 30;
 
-// Spostamento fittizio a ogni campione.
-// Valori piccoli: simulano un movimento graduale.
+// Fictitious displacement at each sample.
+// Small values: they simulate gradual movement.
 const AUTOPOS_STEP_LAT: f64 = 0.00045;
 const AUTOPOS_STEP_LON: f64 = 0.00045;
 
@@ -68,7 +68,7 @@ async fn main() -> Result<()> {
     let autopos_task = tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(AUTOPOS_SECS));
 
-        // Consuma il primo tick immediato: così il primo POSITION parte dopo 30 secondi.
+        // Consume the first immediate tick: this way the first POSITION goes out after 30 seconds.
         interval.tick().await;
 
         loop {
@@ -104,7 +104,7 @@ async fn main() -> Result<()> {
             };
 
             if let Err(e) = send_msg(&sink_auto, &msg).await {
-                eprintln!("[autopos] errore invio posizione: {e}");
+                eprintln!("[autopos] failed to send position: {e}");
                 break;
             }
 
@@ -143,12 +143,12 @@ async fn main() -> Result<()> {
                         points,
                     }) => {
                         println!(
-                            "[stats] utente={username} punti={points} intervallo=[{from_ts}, {to_ts}]\n\
-                             \tdistanza: {:.2} m\n\
-                             \tmovimento: {} ({movement_secs} s)\n\
-                             \tpause:      {} ({pause_secs} s)\n\
-                             \ttotale:     {} ({total_secs} s)\n\
-                             \tvelocità media: {:.2} m/s = {:.2} km/h",
+                            "[stats] user={username} points={points} interval=[{from_ts}, {to_ts}]\n\
+                             \tdistance: {:.2} m\n\
+                             \tmovement: {} ({movement_secs} s)\n\
+                             \tpauses:     {} ({pause_secs} s)\n\
+                             \ttotal:      {} ({total_secs} s)\n\
+                             \taverage speed: {:.2} m/s = {:.2} km/h",
                             distance_m,
                             fmt_duration(movement_secs),
                             fmt_duration(pause_secs),
@@ -185,7 +185,7 @@ async fn main() -> Result<()> {
         }
     });
 
-    println!("comandi: /register <u> <p> | /login <u> <p> | /start [lat lon] | /pos <lat> <lon> [ts] | /stats day|week|month | /stats-range <from_ts> <to_ts> | /end | /chat <t> | /quit");
+    println!("commands: /register <u> <p> | /login <u> <p> | /start [lat lon] | /pos <lat> <lon> [ts] | /stats day|week|month | /stats-range <from_ts> <to_ts> | /end | /chat <t> | /quit");
 
     let stdin = tokio::io::stdin();
     let mut stdin = BufReader::new(stdin).lines();
@@ -254,7 +254,7 @@ async fn parse_cmd(line: &str, token: &SharedToken, trip: &SharedTrip, autopos_e
             *autopos_enabled.lock().await = true;
 
             println!(
-                "[autopos] attivo: invierà una POSITION ogni {AUTOPOS_SECS} secondi dopo TRIP_STARTED"
+                "[autopos] active: will send a POSITION every {AUTOPOS_SECS} seconds after TRIP_STARTED"
             );
 
             Some(Message::StartTrip {
@@ -271,21 +271,21 @@ async fn parse_cmd(line: &str, token: &SharedToken, trip: &SharedTrip, autopos_e
             let lat: f64 = match parts.next().and_then(|s| s.parse().ok()) {
                 Some(v) => v,
                 None => {
-                    println!("uso: /pos <lat> <lon> [ts]");
+                    println!("usage: /pos <lat> <lon> [ts]");
                     return None;
                 }
             };
             let lon: f64 = match parts.next().and_then(|s| s.parse().ok()) {
                 Some(v) => v,
                 None => {
-                    println!("uso: /pos <lat> <lon> [ts]");
+                    println!("usage: /pos <lat> <lon> [ts]");
                     return None;
                 }
             };
             let ts: i64 = match parts.next().and_then(|s| s.parse().ok()) {
                 Some(v) => v,
                 None => {
-                    println!("uso: /pos <lat> <lon> <ts>");
+                    println!("usage: /pos <lat> <lon> <ts>");
                     return None;
                 }
             };
@@ -303,11 +303,11 @@ async fn parse_cmd(line: &str, token: &SharedToken, trip: &SharedTrip, autopos_e
             let (from_ts, to_ts, label) = match stats_interval(rest) {
                 Some(v) => v,
                 None => {
-                    println!("uso: /stats day|week|month");
+                    println!("usage: /stats day|week|month");
                     return None;
                 }
             };
-            println!("richiedo statistiche per {label} UTC: [{from_ts}, {to_ts}]");
+            println!("requesting statistics for {label} UTC: [{from_ts}, {to_ts}]");
             Some(Message::Stats {
                 token: t,
                 from_ts,
@@ -320,14 +320,14 @@ async fn parse_cmd(line: &str, token: &SharedToken, trip: &SharedTrip, autopos_e
             let from_ts: i64 = match parts.next().and_then(|s| s.parse().ok()) {
                 Some(v) => v,
                 None => {
-                    println!("uso: /stats-range <from_ts> <to_ts>");
+                    println!("usage: /stats-range <from_ts> <to_ts>");
                     return None;
                 }
             };
             let to_ts: i64 = match parts.next().and_then(|s| s.parse().ok()) {
                 Some(v) => v,
                 None => {
-                    println!("uso: /stats-range <from_ts> <to_ts>");
+                    println!("usage: /stats-range <from_ts> <to_ts>");
                     return None;
                 }
             };
@@ -348,7 +348,7 @@ async fn parse_cmd(line: &str, token: &SharedToken, trip: &SharedTrip, autopos_e
         }
         "/chat" => {
             if rest.is_empty() {
-                println!("uso: /chat <testo>");
+                println!("usage: /chat <text>");
                 return None;
             }
             let t = require_token(token).await?;
@@ -362,7 +362,7 @@ async fn parse_cmd(line: &str, token: &SharedToken, trip: &SharedTrip, autopos_e
             Some(Message::Disconnect { token: t })
         }
         _ => {
-            println!("comando non valido: {cmd}");
+            println!("invalid command: {cmd}");
             None
         }
     }
@@ -372,7 +372,7 @@ async fn require_token(token: &SharedToken) -> Option<String> {
     match token.lock().await.clone() {
         Some(t) => Some(t),
         None => {
-            println!("devi prima fare /register o /login");
+            println!("you must /register or /login first");
             None
         }
     }
@@ -382,7 +382,7 @@ async fn require_trip(trip: &SharedTrip) -> Option<i64> {
     match trip.lock().await.clone() {
         Some(info) => Some(info),
         None => {
-            println!("nessun viaggio aperto: usa /start prima");
+            println!("no open trip: use /start first");
             None
         }
     }
@@ -408,14 +408,14 @@ fn stats_interval(kind: &str) -> Option<(i64, i64, &'static str)> {
     match kind {
         "day" => {
             let start = days * SECS_PER_DAY;
-            Some((start, start + SECS_PER_DAY - 1, "giorno corrente"))
+            Some((start, start + SECS_PER_DAY - 1, "current day"))
         }
         "week" => {
-            // 1970-01-01 era giovedì. Con settimana lunedì-domenica: lunedì=0.
+            // 1970-01-01 was a Thursday. With a Monday-Sunday week: Monday=0.
             let weekday_monday0 = (days + 3).rem_euclid(7);
             let start_days = days - weekday_monday0;
             let start = start_days * SECS_PER_DAY;
-            Some((start, start + 7 * SECS_PER_DAY - 1, "settimana corrente"))
+            Some((start, start + 7 * SECS_PER_DAY - 1, "current week"))
         }
         "month" => {
             let (year, month, _) = civil_from_days(days);
@@ -429,7 +429,7 @@ fn stats_interval(kind: &str) -> Option<(i64, i64, &'static str)> {
             Some((
                 start_days * SECS_PER_DAY,
                 next_start_days * SECS_PER_DAY - 1,
-                "mese corrente",
+                "current month",
             ))
         }
         _ => None,

@@ -6,21 +6,21 @@ use tokio::time;
 const LOG_INTERVAL: Duration = Duration::from_secs(120);
 const LOG_FILE: &str = "server_cpu.log";
 
-/// Task in background: ogni 2 minuti misura il tempo CPU usato dal processo
-/// e lo appende a `server_cpu.log`.
+/// Background task: every 2 minutes it measures the CPU time used by the
+/// process and appends it to `server_cpu.log`.
 ///
-/// Riporta due valori per ogni riga:
-/// - `cpu_totale`: CPU time cumulativo dall'avvio del logger (user+system).
-/// - `cpu_intervallo`: CPU time consumato negli ultimi 2 minuti.
+/// It reports two values per line:
+/// - `cpu_total`: cumulative CPU time since the logger started (user+system).
+/// - `cpu_interval`: CPU time consumed over the last 2 minutes.
 pub async fn start_cpu_logger() {
-    tracing::info!("cpu_log: avviato, log su '{LOG_FILE}' ogni {}s", LOG_INTERVAL.as_secs());
+    tracing::info!("cpu_log: started, logging to '{LOG_FILE}' every {}s", LOG_INTERVAL.as_secs());
 
     let t_start = ProcessTime::now();
     let mut t_prev = ProcessTime::now();
 
     let mut ticker = time::interval(LOG_INTERVAL);
     ticker.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
-    ticker.tick().await; // salta il tick immediato iniziale
+    ticker.tick().await; // skip the initial immediate tick
 
     loop {
         ticker.tick().await;
@@ -43,17 +43,17 @@ fn write_entry(total: Duration, interval: Duration) {
     let m = (wall / 60) % 60;
     let s = wall % 60;
 
-    // Normalizza la % sul numero di core logici. Esempio: 1 core saturo per
-    // 2 minuti su una macchina a 8 core = 1/8 = 12.5%, non 100%. Senza
-    // normalizzazione la percentuale può sforare 100 (più core saturi
-    // contemporaneamente) e perde leggibilità.
+    // Normalize the % over the number of logical cores. Example: 1 core
+    // saturated for 2 minutes on an 8-core machine = 1/8 = 12.5%, not 100%.
+    // Without normalization the percentage can exceed 100 (multiple cores
+    // saturated at once) and loses readability.
     let cores = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1) as f64;
     let pct = (interval.as_secs_f64() / (LOG_INTERVAL.as_secs_f64() * cores)) * 100.0;
 
     let line = format!(
-        "[{wall}] [{h:02}:{m:02}:{s:02} UTC]  cpu_totale={:.3}s  cpu_intervallo_2min={:.3}s  cpu_pct={:.2}%  cores={}\n",
+        "[{wall}] [{h:02}:{m:02}:{s:02} UTC]  cpu_total={:.3}s  cpu_interval_2min={:.3}s  cpu_pct={:.2}%  cores={}\n",
         total.as_secs_f64(),
         interval.as_secs_f64(),
         pct,
@@ -67,9 +67,9 @@ fn write_entry(total: Duration, interval: Duration) {
     {
         Ok(mut f) => {
             if let Err(e) = f.write_all(line.as_bytes()) {
-                tracing::warn!("cpu_log: scrittura su {LOG_FILE} fallita: {e}");
+                tracing::warn!("cpu_log: writing to {LOG_FILE} failed: {e}");
             }
         }
-        Err(e) => tracing::warn!("cpu_log: apertura {LOG_FILE} fallita: {e}"),
+        Err(e) => tracing::warn!("cpu_log: opening {LOG_FILE} failed: {e}"),
     }
 }

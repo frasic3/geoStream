@@ -1,35 +1,35 @@
 # Georuggine
 
-App di tracciamento viaggi: un server, più client (CLI o browser). Mappa live di Torino con un veicolo che si muove su grafo stradale, autenticazione utenti e chat in tempo reale.
+Trip-tracking app: one server, multiple clients (CLI or browser). Live map of Turin with a vehicle moving on a road graph, user authentication and real-time chat.
 
-## Panoramica
+## Overview
 
-Workspace Cargo con 5 crate:
+Cargo workspace with 5 crates:
 
-- `common` — protocollo `Message` (enum JSON) + validatori
-- `db` — SQLite via `sqlx`, migrations, sessioni in-memory
-- `server` — HTTP + WebSocket (`axum`), serve mappa e asset
-- `client` — REPL CLI su WebSocket
-- `sim` — simulatore veicolo compilato a WebAssembly, gira nel browser
+- `common` — `Message` protocol (JSON enum) + validators
+- `db` — SQLite via `sqlx`, migrations, in-memory sessions
+- `server` — HTTP + WebSocket (`axum`), serves map and assets
+- `client` — CLI REPL over WebSocket
+- `sim` — vehicle simulator compiled to WebAssembly, runs in the browser
 
-Trasporto: WebSocket full-duplex su `/ws`, porta `7878`. Storage: SQLite locale (`georuggine.db`).
+Transport: full-duplex WebSocket on `/ws`, port `7878`. Storage: local SQLite (`georuggine.db`).
 
 ## Quick start
 
 ```bash
-cargo run -p server     # terminale 1
-cargo run -p client     # terminale 2
+cargo run -p server     # terminal 1
+cargo run -p client     # terminal 2
 ```
 
-Poi apri `http://127.0.0.1:7878` nel browser per la mappa.
+Then open `http://127.0.0.1:7878` in the browser for the map.
 
-## Test
+## Tests
 
 ```bash
 cargo test --workspace
 ```
 
-## Documentazione
+## Documentation
 
-- [Manuale utente](docs/manuale-utente.md) — installazione, avvio, comandi, uso in LAN
-- [Manuale del progettista](docs/manuale-progettista.md) — architettura, scelte progettuali, protocollo, sicurezza, valutazione
+- [User manual](docs/user-manual.md) — installation, startup, commands, LAN usage
+- [Designer manual](docs/designer-manual.md) — architecture, design choices, protocol, security, evaluation

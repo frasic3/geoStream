@@ -1,31 +1,31 @@
 #!/usr/bin/env python3
-"""Esporta un grafo stradale di Torino (centro) in JSON per il simulatore WASM.
+"""Exports a Turin (city center) road graph to JSON for the WASM simulator.
 
-Stesso scopo di OSMnx (grafo guidabile da OpenStreetMap), ma senza le sue
-dipendenze pesanti: usa solo la stdlib e l'API Overpass via HTTP.
+Same purpose as OSMnx (drivable graph from OpenStreetMap), but without its
+heavy dependencies: it uses only the stdlib and the Overpass API over HTTP.
 
 Output: web/data/graph.json
     {
-      "nodes": [[lat, lon], ...],     # indice = id nodo
-      "adj":   [[j, k, ...], ...]     # adj[i] = nodi vicini (grafo non orientato)
+      "nodes": [[lat, lon], ...],     # index = node id
+      "adj":   [[j, k, ...], ...]     # adj[i] = neighboring nodes (undirected graph)
     }
 
-I nodi sono i punti OSM delle strade guidabili; gli archi collegano nodi
-consecutivi lungo ogni way. Il simulatore cammina di nodo in nodo seguendo la
-forma reale delle strade e sceglie la direzione agli incroci.
+Nodes are the OSM points of drivable streets; edges connect consecutive
+nodes along each way. The simulator walks from node to node following the
+real shape of the streets and picks a direction at intersections.
 
-Uso:
+Usage:
     python tools/export_turin_graph.py
 """
 import json
 import os
 import urllib.request
 
-# Bounding box centro Torino (south, west, north, east). Piccolo apposta:
-# tiene il file leggero (spec: attenzione alla dimensione) e il giro nel centro.
+# Bounding box of central Turin (south, west, north, east). Deliberately small:
+# keeps the file light (spec: mind the size) and the tour within the center.
 SOUTH, WEST, NORTH, EAST = 45.050, 7.660, 45.090, 7.705
 
-# Tipi di strada percorribili in auto.
+# Road types drivable by car.
 HIGHWAY = (
     "motorway|trunk|primary|secondary|tertiary|unclassified|residential|"
     "living_street|motorway_link|trunk_link|primary_link|secondary_link|"
@@ -45,9 +45,9 @@ OUT_PATH = os.path.join(os.path.dirname(__file__), "..", "web", "data", "graph.j
 
 
 def fetch():
-    print("Query Overpass (Torino centro)...")
+    print("Overpass query (central Turin)...")
     data = urllib.parse.urlencode({"data": QUERY}).encode()
-    # Overpass rifiuta lo User-Agent di default di urllib con 406: dichiarane uno.
+    # Overpass rejects urllib's default User-Agent with 406: declare one.
     req = urllib.request.Request(
         OVERPASS_URL,
         data=data,
@@ -59,14 +59,14 @@ def fetch():
 
 def build_graph(osm):
     coords = {}          # osm_id -> (lat, lon)
-    ways = []            # lista di liste di osm_id
+    ways = []            # list of lists of osm_id
     for el in osm["elements"]:
         if el["type"] == "node":
             coords[el["id"]] = (el["lat"], el["lon"])
         elif el["type"] == "way" and "nodes" in el:
             ways.append(el["nodes"])
 
-    # Tieni solo i nodi effettivamente usati dalle way e dai loro un indice 0..N.
+    # Keep only the nodes actually used by the ways and give them a 0..N index.
     used = []
     seen = set()
     for w in ways:
@@ -77,8 +77,8 @@ def build_graph(osm):
     index = {nid: i for i, nid in enumerate(used)}
     nodes = [[coords[nid][0], coords[nid][1]] for nid in used]
 
-    # Adiacenze da coppie consecutive (grafo non orientato; per la demo
-    # ignoriamo i sensi unici).
+    # Adjacencies from consecutive pairs (undirected graph; for the demo
+    # we ignore one-way streets).
     adj = [set() for _ in nodes]
     for w in ways:
         prev = None
@@ -103,7 +103,7 @@ def main():
         json.dump(graph, f, separators=(",", ":"))
     size_kb = os.path.getsize(OUT_PATH) / 1024
     n_edges = sum(len(a) for a in graph["adj"]) // 2
-    print(f"OK: {len(graph['nodes'])} nodi, {n_edges} archi -> {OUT_PATH} ({size_kb:.0f} KB)")
+    print(f"OK: {len(graph['nodes'])} nodes, {n_edges} edges -> {OUT_PATH} ({size_kb:.0f} KB)")
 
 
 if __name__ == "__main__":
